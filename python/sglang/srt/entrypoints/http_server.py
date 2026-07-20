@@ -94,11 +94,13 @@ from sglang.srt.entrypoints.openai.protocol import (
     TokenizeRequest,
     V1RerankReqInput,
 )
+from sglang.srt.entrypoints.openai.protocol_tree import TreeCompletionRequest
 from sglang.srt.entrypoints.openai.serving_classify import OpenAIServingClassify
 from sglang.srt.entrypoints.openai.serving_completions import OpenAIServingCompletion
 from sglang.srt.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
 from sglang.srt.entrypoints.openai.serving_rerank import OpenAIServingRerank
 from sglang.srt.entrypoints.openai.serving_score import OpenAIServingScore
+from sglang.srt.entrypoints.openai.serving_tree import OpenAIServingTree
 from sglang.srt.entrypoints.openai.serving_tokenize import (
     OpenAIServingDetokenize,
     OpenAIServingTokenize,
@@ -302,6 +304,9 @@ async def lifespan(fast_api_app: FastAPI):
         _global_state.tokenizer_manager.serving_chat_class(
             _global_state.tokenizer_manager, _global_state.template_manager
         )
+    )
+    fast_api_app.state.openai_serving_tree = OpenAIServingTree(
+        _global_state.tokenizer_manager, fast_api_app.state.openai_serving_chat
     )
     fast_api_app.state.openai_serving_embedding = OpenAIServingEmbedding(
         _global_state.tokenizer_manager, _global_state.template_manager
@@ -552,6 +557,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             status_code=HTTPStatus.BAD_REQUEST.value,
             error_type="invalid_request_error",
             message=_anthropic_validation_message(exc.errors()),
+        )
+
+    if request.url.path == "/v1/tree/completions":
+        first_error = exc.errors()[0] if exc.errors() else {}
+        location = first_error.get("loc", ())
+        param = ".".join(str(part) for part in location if part != "body") or None
+        return ORJSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": first_error.get("msg", "Request validation failed"),
+                    "type": "invalid_request_error",
+                    "param": param,
+                    "code": "validation_error",
+                }
+            },
         )
 
     exc_str = str(exc)
@@ -1652,6 +1673,16 @@ async def openai_v1_chat_completions(
 ):
     """OpenAI-compatible chat completion endpoint."""
     return await raw_request.app.state.openai_serving_chat.handle_request(
+        request, raw_request
+    )
+
+
+@app.post("/v1/tree/completions", dependencies=[Depends(validate_json_request)])
+async def openai_v1_tree_completions(
+    request: TreeCompletionRequest, raw_request: Request
+):
+    """AutoTree-compatible tree completion endpoint."""
+    return await raw_request.app.state.openai_serving_tree.handle_request(
         request, raw_request
     )
 
