@@ -76,6 +76,19 @@ class TreeSummary:
 
 
 @dataclasses.dataclass
+class TreeCounters:
+    """Engine counters carried by the wire spec's final done event."""
+
+    logical_tokens: int = 0
+    physical_tokens: int = 0
+    useful_tokens: int = 0
+    elapsed_seconds: float = 0.0
+    ttft_seconds: float = 0.0
+    unique_tokens_per_step: List[int] = dataclasses.field(default_factory=list)
+    branch_tokens_per_step: List[int] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
 class TreeResult:
     """Non-streaming result envelope handed back to the serving layer."""
 
@@ -84,4 +97,6 @@ class TreeResult:
     prompt_tokens: int
     completion_tokens: int
     summary: TreeSummary
+    finish_reason: str = "stop"
+    counters: Optional[TreeCounters] = None
     branch_events: List[TreeBranchEvent] = dataclasses.field(default_factory=list)

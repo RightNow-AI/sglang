@@ -2,6 +2,7 @@
 
 from sglang.srt.tree.params import (
     TreeBranchEvent,
+    TreeCounters,
     TreeGenerateReqInput,
     TreeParams,
     TreeResult,
@@ -10,6 +11,7 @@ from sglang.srt.tree.params import (
 
 __all__ = [
     "TreeBranchEvent",
+    "TreeCounters",
     "TreeGenerateReqInput",
     "TreeParams",
     "TreeResult",
