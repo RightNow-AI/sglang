@@ -51,7 +51,11 @@ import os as _os
 
 VALUE_CHECK_INTERVAL = int(_os.environ.get("AUTOTREE_VALUE_CHECK_INTERVAL", "16"))
 VALUE_WARMUP_TOKENS = int(_os.environ.get("AUTOTREE_VALUE_WARMUP_TOKENS", "8"))
-VALUE_MARGIN = float(_os.environ.get("AUTOTREE_VALUE_MARGIN", "0.35"))
+# Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
+# minority-correct branches (accuracy loss); the naive logprob proxy
+# cannot separate branches more finely. Lower this only with a scorer
+# stronger than mean logprob (value head).
+VALUE_MARGIN = float(_os.environ.get("AUTOTREE_VALUE_MARGIN", "0.8"))
 VALUE_MIN_KEEP = int(_os.environ.get("AUTOTREE_VALUE_MIN_KEEP", "2"))
 
 
