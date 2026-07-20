@@ -6,7 +6,13 @@ import torch
 
 from sglang.srt.mem_cache.base_prefix_cache import EvictParams
 from sglang.srt.mem_cache.radix_cache import RadixCache
-from sglang.srt.tree.scheduler_hooks import apply_kill, on_parent_prefill_done
+from sglang.srt.tree.params import TreeParams
+from sglang.srt.tree.scheduler_hooks import (
+    RustSchedulerAdapter,
+    apply_kill,
+    on_branch_token,
+    on_parent_prefill_done,
+)
 from sglang.test.ci.ci_register import register_cpu_ci
 
 register_cpu_ci(est_time=2, suite="base-c-test-cpu")
@@ -131,3 +137,61 @@ def test_prune_reclaims_only_branch_suffix_once_and_releases_its_lock():
         if call.args and len(call.args[0])
     ]
     assert nonempty_frees == [[208, 209]]
+
+
+class FakeRustScheduler:
+    instances = []
+
+    def __init__(self, config):
+        self.config = config
+        self.events = []
+        self.commands = [
+            {"type": "continue", "branch": 1},
+            {"type": "kill", "branch": 2, "reason": "beam"},
+        ]
+        self.drained = False
+        self.__class__.instances.append(self)
+
+    def feed_event(self, event):
+        self.events.append(event)
+
+    def poll_commands(self):
+        commands, self.commands = self.commands, []
+        return commands
+
+    def drain(self):
+        self.drained = True
+        self.commands = [{"type": "finalize", "branch": 1}]
+
+
+def test_rust_scheduler_adapter_runs_with_injected_stub_without_wheel():
+    adapter = RustSchedulerAdapter(
+        TreeParams(
+            policy="best_first", branches=3, budget_tokens=17, scorer="logprob"
+        ),
+        scheduler_cls=FakeRustScheduler,
+    )
+
+    commands = on_branch_token(adapter, 1, 42, -0.25, eos=False)
+
+    fake = FakeRustScheduler.instances[-1]
+    assert fake.config == {
+        "policy": "best_first",
+        "branches": 3,
+        "budget_tokens": 17,
+        "scorer": "logprob",
+    }
+    assert fake.events == [
+        {
+            "type": "token_sampled",
+            "branch": 1,
+            "token": 42,
+            "logprob": -0.25,
+            "eos": False,
+        }
+    ]
+    assert commands == (
+        {"type": "continue", "branch": 1},
+        {"type": "kill", "branch": 2, "reason": "beam"},
+    )
+    assert adapter.drain() == ({"type": "finalize", "branch": 1},)

@@ -10,7 +10,7 @@ import dataclasses
 from array import array
 from typing import Any, Callable, Optional
 
-from sglang.srt.tree.params import TreeGenerateReqInput
+from sglang.srt.tree.params import TreeGenerateReqInput, TreeParams
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,6 +33,74 @@ class ForkPlan:
     prefix_length: int
     prefix_node: Any
     children: tuple[BranchRequestDescriptor, ...]
+
+
+class RustSchedulerAdapter:
+    """Narrow adapter over the optional ``autotree_scheduler`` PyO3 wheel."""
+
+    def __init__(
+        self,
+        params: TreeParams,
+        *,
+        scheduler_cls: Optional[Callable[[dict[str, Any]], Any]] = None,
+    ) -> None:
+        if scheduler_cls is None:
+            try:
+                from autotree_scheduler import Scheduler
+            except ImportError as exc:
+                raise RuntimeError(
+                    "tree execution requires the autotree_scheduler wheel"
+                ) from exc
+            scheduler_cls = Scheduler
+
+        config = {
+            "policy": params.policy,
+            "branches": params.branches,
+            "budget_tokens": params.budget_tokens,
+        }
+        if params.scorer is not None:
+            config["scorer"] = params.scorer
+        self.scheduler = scheduler_cls(config)
+
+    def feed_token(
+        self,
+        branch_id: int,
+        token: int,
+        logprob: float,
+        *,
+        eos: bool = False,
+    ) -> tuple[dict[str, Any], ...]:
+        """Feed one sampled token and drain boundary-safe policy commands."""
+        self.scheduler.feed_event(
+            {
+                "type": "token_sampled",
+                "branch": branch_id,
+                "token": token,
+                "logprob": logprob,
+                "eos": eos,
+            }
+        )
+        poll = getattr(self.scheduler, "poll_commands", None)
+        if poll is None:
+            poll = getattr(self.scheduler, "next_commands", None)
+        if poll is None:
+            raise TypeError("policy scheduler exposes no command polling method")
+        commands = tuple(dict(command) for command in poll())
+        valid_types = {"continue", "kill", "finalize", "fork_at"}
+        for command in commands:
+            if command.get("type") not in valid_types:
+                raise ValueError(f"unknown tree scheduler command: {command!r}")
+        return commands
+
+    def drain(self) -> tuple[dict[str, Any], ...]:
+        """Ask the policy to finalize remaining work and return its commands."""
+        self.scheduler.drain()
+        poll = getattr(self.scheduler, "poll_commands", None)
+        if poll is None:
+            poll = getattr(self.scheduler, "next_commands", None)
+        if poll is None:
+            raise TypeError("policy scheduler exposes no command polling method")
+        return tuple(dict(command) for command in poll())
 
 
 def on_tree_request(tree_input: TreeGenerateReqInput) -> Any:
@@ -103,7 +171,25 @@ def on_branch_token(
     eos: bool = False,
 ) -> Any:
     """Feed a token event to the Rust policy and return its commands."""
-    raise NotImplementedError
+    if isinstance(policy_scheduler, RustSchedulerAdapter):
+        return policy_scheduler.feed_token(
+            branch_id, token, logprob, eos=eos
+        )
+    policy_scheduler.feed_event(
+        {
+            "type": "token_sampled",
+            "branch": branch_id,
+            "token": token,
+            "logprob": logprob,
+            "eos": eos,
+        }
+    )
+    poll = getattr(policy_scheduler, "poll_commands", None)
+    if poll is None:
+        poll = getattr(policy_scheduler, "next_commands", None)
+    if poll is None:
+        raise TypeError("policy scheduler exposes no command polling method")
+    return tuple(dict(command) for command in poll())
 
 
 def apply_kill(
