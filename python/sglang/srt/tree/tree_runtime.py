@@ -60,7 +60,10 @@ VALUE_MIN_KEEP = int(_os.environ.get("AUTOTREE_VALUE_MIN_KEEP", "2"))
 
 
 class _BranchState:
-    __slots__ = ("rid", "branch_id", "req", "tokens", "score", "state", "lp_seen")
+    __slots__ = (
+        "rid", "branch_id", "req", "tokens", "score", "state", "lp_seen",
+        "final_answer",
+    )
 
     def __init__(self, rid: str, branch_id: int, req: Any) -> None:
         self.rid = rid
@@ -70,6 +73,7 @@ class _BranchState:
         self.score = 0.0
         self.state = "active"
         self.lp_seen = 0
+        self.final_answer = None  # extracted once the branch finishes
 
     def mean_logprob(self) -> float:
         return self.score / self.tokens if self.tokens else 0.0
@@ -240,6 +244,7 @@ class SchedulerTreeRuntime:
         if run.spent - run.last_value_check >= VALUE_CHECK_INTERVAL:
             run.last_value_check = run.spent
             self._maybe_value_prune(run)
+            self._maybe_majority_lock(run)
 
         if state.branch_id == 0:
             self._attach_snapshot(run)
@@ -256,6 +261,82 @@ class SchedulerTreeRuntime:
         budget = int(run.params.get("budget_tokens", 0) or 0)
         if budget and run.spent >= budget and not run.finalized:
             self._finalize(run, reason="budget")
+
+    def _extract_branch_answer(self, branch: _BranchState) -> Optional[str]:
+        """Decode a finished branch and extract its final numeric answer
+        ('#### N' preferred, else the last number). Cached per branch."""
+        if branch.final_answer is not None:
+            return branch.final_answer or None
+        tokenizer = getattr(self.scheduler, "tokenizer", None)
+        if tokenizer is None or branch.req is None:
+            return None
+        import re
+
+        ids = list(branch.req.output_ids)
+        eos = getattr(tokenizer, "eos_token_id", None)
+        if branch.branch_id == 0:
+            # The held parent votes only once its natural EOS has appeared:
+            # everything before it is the parent's immutable final answer
+            # (serving trims at the same point), everything after is
+            # scaffolding from the hold.
+            if eos is None or eos not in ids:
+                return None
+            ids = ids[: ids.index(eos)]
+        elif eos is not None and eos in ids:
+            ids = ids[: ids.index(eos)]
+        try:
+            text = tokenizer.decode(ids, skip_special_tokens=True)
+        except Exception:
+            branch.final_answer = ""
+            return None
+        marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
+        raw = marked[-1] if marked else None
+        if raw is None:
+            nums = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
+            raw = nums[-1] if nums else None
+        if raw is None:
+            branch.final_answer = ""
+            return None
+        raw = raw.replace(",", "").rstrip(".")
+        try:
+            value = float(raw)
+            answer = str(int(value)) if value == int(value) else str(value)
+        except ValueError:
+            branch.final_answer = ""
+            return None
+        branch.final_answer = answer
+        return answer
+
+    def _maybe_majority_lock(self, run: _TreeRun) -> None:
+        """Zero-accuracy-cost early termination: once finished branches agree
+        on an answer that the still-running branches can no longer outvote,
+        the tree's outcome is decided - finalize immediately and reclaim every
+        remaining token. Safe by construction with respect to the final vote."""
+        if run.finalized or len(run.branches) < 3:
+            return
+        total = len(run.branches)
+        needed = total // 2 + 1
+        counts: Dict[str, int] = {}
+        for b in run.branches.values():
+            if b.req is None:
+                continue
+            if b.branch_id != 0 and not b.req.finished():
+                continue
+            # branch 0 (the held parent) is eligible once its natural EOS has
+            # appeared; _extract_branch_answer returns None before that.
+            answer = self._extract_branch_answer(b)
+            if answer:
+                counts[answer] = counts.get(answer, 0) + 1
+        if not counts:
+            return
+        top_answer, top_count = max(counts.items(), key=lambda kv: kv[1])
+        if top_count >= needed:
+            logger.info(
+                "[tree] %s majority locked on '%s' (%d/%d finished votes); "
+                "terminating remaining branches early",
+                run.parent_rid, top_answer, top_count, total,
+            )
+            self._finalize(run, reason="majority_locked")
 
     def _attach_snapshot(self, run: _TreeRun, include_outputs: bool = False) -> None:
         """Publish the live tree trace on the parent request. The output
@@ -365,12 +446,10 @@ class SchedulerTreeRuntime:
             run.parent_rid, reason, winner.branch_id, run.spent, run.pruned,
         )
 
-        parent = run.branches["0"].req
-        if winner.branch_id != 0 and winner.req is not None:
-            try:
-                parent.output_ids[:] = list(winner.req.output_ids)
-            except Exception:
-                logger.exception("[tree] winner copy failed; parent keeps own text")
+        # NOTE: never mutate parent.output_ids here. Rewriting the token array
+        # post-hoc desyncs the KV allocator's page accounting (measured: pool
+        # leak abort from the invariant checker). The serving layer reconstructs
+        # the winner's text from the final snapshot instead.
 
         from sglang.srt.managers.schedule_batch import FINISH_LENGTH
 
