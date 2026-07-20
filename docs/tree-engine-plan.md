@@ -45,3 +45,26 @@ phase 2.
 - Fork at arbitrary decode token (page-aligned split of live sequences)
 - Tree-mask batched decode borrowing EAGLE mask kernels (eagle_utils.py:140)
 - Content-addressed dedup across sibling suffixes
+
+## Linux validation, 2026-07-20 (Lambda A10, lmsysorg/sglang:latest container)
+
+- tree suite: 7/7 pass on the fork-proper environment; 6/7 in the container
+  overlay, where the one failure is a known base-version artifact (the test
+  drives fork-HEAD `cache_finished_req(kv_len_to_handle=...)`, absent in the
+  container's 0.5.15 base). Not a fork defect.
+- tree_api suite: 7/7 pass in container (needs pytest-asyncio).
+- No-breakage check: container radix suite 31 passed plus 61 subtests, zero
+  failures with the fork overlaid.
+- Engine boots and generates with fork code overlaid (Qwen2.5-0.5B, CUDA
+  graphs captured, correct output).
+
+Environment recipe that works: official container + additive overlay of
+srt/tree and the two openai files; or fork-source install with
+torch==2.11.0 (cu-matched build), transformers==5.12.1, sgl-kernel wheel
+from sgl-project releases (arch-matched), flashinfer-python==0.6.14 plus
+flashinfer-jit-cache==0.6.14 from flashinfer.ai/whl/<cu>, outlines==0.1.11,
+numpy<2, gguf, pytest, pytest-asyncio.
+
+Remaining for phase-1 runtime: scheduler.py splice of the committed bridge,
+tokenizer-manager fan-in, endpoint smoke over HTTP, wire-contract conformance
+with the AutoTree SDK.
