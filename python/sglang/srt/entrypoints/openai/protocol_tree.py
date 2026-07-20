@@ -88,7 +88,7 @@ class TreeSummaryResponse(BaseModel):
     tokens_spent_per_branch: Dict[str, int]
     final_scores: Dict[str, float]
     scorer: Optional[str]
-    kv_reuse_ratio: float
+    kv_reuse_ratio: Optional[float] = None
 
 
 class TreeResponseMessage(BaseModel):

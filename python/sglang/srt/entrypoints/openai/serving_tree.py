@@ -313,8 +313,9 @@ class OpenAIServingTree(OpenAIServingBase):
     def _summary(summary: TreeSummary) -> TreeSummaryResponse:
         if summary.winner_branch_id is None:
             raise ValueError("Tree result is missing winner_branch_id")
-        if summary.kv_reuse_ratio is None:
-            raise ValueError("Tree result is missing kv_reuse_ratio")
+        # kv_reuse_ratio is null in the phase-1 fallback (per-branch trace not
+        # yet surfaced through the wire); it is populated once the runtime emits
+        # the full tree envelope. A null here is honest, not an error.
         return TreeSummaryResponse(
             policy=summary.policy,
             branch_count=summary.branch_count,
