@@ -105,7 +105,8 @@ class RustSchedulerAdapter:
 
 def on_tree_request(tree_input: TreeGenerateReqInput) -> Any:
     """Build the parent request submission plan for a new tree."""
-    raise NotImplementedError
+    tree_input.tree.validate()
+    return tree_input.base
 
 
 def on_parent_prefill_done(
@@ -172,9 +173,7 @@ def on_branch_token(
 ) -> Any:
     """Feed a token event to the Rust policy and return its commands."""
     if isinstance(policy_scheduler, RustSchedulerAdapter):
-        return policy_scheduler.feed_token(
-            branch_id, token, logprob, eos=eos
-        )
+        return policy_scheduler.feed_token(branch_id, token, logprob, eos=eos)
     policy_scheduler.feed_event(
         {
             "type": "token_sampled",
