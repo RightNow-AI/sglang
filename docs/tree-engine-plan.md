@@ -68,3 +68,30 @@ numpy<2, gguf, pytest, pytest-asyncio.
 Remaining for phase-1 runtime: scheduler.py splice of the committed bridge,
 tokenizer-manager fan-in, endpoint smoke over HTTP, wire-contract conformance
 with the AutoTree SDK.
+
+## Runtime splice status, 2026-07-20 (GPU, container SGLang 0.5.15)
+
+PROVEN on an A10: the /v1/tree/completions endpoint reaches the scheduler,
+recognizes tree requests, and FORKS sibling branches mid-execution that SHARE
+the parent's prefix KV via the radix cache. Log evidence, beam-4 request:
+
+  [tree] request ... forked 3 sibling branches after prefill
+  Prefill batch, #new-seq: 3, #new-token: 3, #cached-token: 123
+
+Three branches prefilled with 3 new tokens total while sharing 123 cached
+prefix tokens - mid-execution fork with prefix-KV reuse, running in the
+production scheduler. This is the core mechanism.
+
+REMAINING (focused hardening lane, not a quick patch): forked branches are
+currently built by hand-constructing Req objects, which do not inherit the
+field-type invariants SGLang's real intake path establishes (origin_input_ids
+as list vs output_ids as array; several `origin_input_ids + output_ids` concat
+sites across schedule_batch.py assume matching types set during init). The
+correct fix is to spawn branches by routing a TokenizedGenerateReqInput per
+branch (prompt = parent prompt + tokens-generated-so-far) through
+handle_generate_request, so the real request-init path sets every invariant and
+the radix cache shares the prefix automatically. Then: prune-emit via to_finish,
+TreeResult over the customized_info channel, overlap-scheduler safety, SDK
+conformance. The splice mechanics (dispatch entry, hooks, HTTP route,
+serving fallback) are done and committed; only branch construction needs the
+intake-path rewrite.
