@@ -24,8 +24,7 @@ def _install_fake_dependencies(monkeypatch):
             return {"args": args, "kwargs": kwargs}
 
     class SGLangReplica:
-        def __init__(self, *args, **kwargs):
-            self.server_class = "sglang"
+        server_class = "sglang"
 
     class TokenOutput:
         def __init__(self, **kwargs):

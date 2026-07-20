@@ -169,13 +169,12 @@ def _build_replica() -> type:
     sglang_replica = server_module.SGLangReplica
     ray = import_module("ray")
     http_server = __getattr__("AutoTreeHttpServer")
+    remote_http_server = ray.remote(http_server)
 
     class AutoTreeReplica(sglang_replica):
         """SGLang replica whose actors use :class:`AutoTreeHttpServer`."""
 
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, **kwargs)
-            self.server_class = ray.remote(http_server)
+        server_class = remote_http_server
 
     AutoTreeReplica.__module__ = __name__
     AutoTreeReplica.__qualname__ = "AutoTreeReplica"
