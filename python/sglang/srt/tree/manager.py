@@ -6,9 +6,53 @@ module import time so its policy and accounting behavior remains CPU-testable.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Callable, Optional
 
 from sglang.srt.tree.params import TreeGenerateReqInput
+
+
+@dataclasses.dataclass(frozen=True)
+class BudgetUpdate:
+    """Outcome of charging one generated token to a tree budget."""
+
+    accepted: bool
+    spent: int
+    remaining: int
+    exhausted: bool
+
+
+class TreeTokenBudget:
+    """Hard aggregate token budget shared by every branch in one tree."""
+
+    def __init__(self, budget_tokens: int) -> None:
+        if budget_tokens < 1:
+            raise ValueError("budget_tokens must be positive")
+        self.limit = budget_tokens
+        self.spent = 0
+        self.spent_per_branch: dict[str, int] = {}
+
+    def consume(self, branch_id: str) -> BudgetUpdate:
+        """Charge one token, never allowing aggregate spend above the limit."""
+        if self.spent >= self.limit:
+            return BudgetUpdate(
+                accepted=False,
+                spent=self.spent,
+                remaining=0,
+                exhausted=True,
+            )
+
+        self.spent += 1
+        self.spent_per_branch[branch_id] = (
+            self.spent_per_branch.get(branch_id, 0) + 1
+        )
+        remaining = self.limit - self.spent
+        return BudgetUpdate(
+            accepted=True,
+            spent=self.spent,
+            remaining=remaining,
+            exhausted=remaining == 0,
+        )
 
 
 class TreeRunManager:
