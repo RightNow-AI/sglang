@@ -146,6 +146,39 @@ class OpenAIServingTree(OpenAIServingBase):
         branch_count = int(getattr(params, "branches", 1) or 1)
         scorer = getattr(params, "scorer", None)
         policy = getattr(params, "policy", "beam")
+
+        # The scheduler runtime publishes its live trace through the
+        # customized_info channel; the last snapshot is authoritative.
+        snapshots = meta.get("autotree")
+        snap = snapshots[-1] if isinstance(snapshots, list) and snapshots else None
+        if isinstance(snap, dict):
+            branches = snap.get("branches") or {}
+            summary = TreeSummary(
+                policy=snap.get("policy") or policy,
+                branch_count=int(snap.get("branch_count") or branch_count),
+                pruned_count=int(snap.get("pruned_count") or 0),
+                merged_count=0,
+                winner_branch_id=str(snap.get("winner_branch_id") or "0"),
+                tokens_spent_per_branch={
+                    bid: int(b.get("tokens", 0)) for bid, b in branches.items()
+                },
+                final_scores={
+                    bid: float(b.get("mean_logprob", 0.0))
+                    for bid, b in branches.items()
+                    if b.get("tokens")
+                },
+                scorer=scorer or "mean_logprob",
+                kv_reuse_ratio=None,
+            )
+            return TreeResult(
+                winner_text=text,
+                winner_token_ids=list(meta.get("output_ids", []) or []),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                summary=summary,
+                finish_reason=finish_reason,
+            )
+
         summary = TreeSummary(
             policy=policy,
             branch_count=branch_count,

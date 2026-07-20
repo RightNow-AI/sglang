@@ -46,10 +46,13 @@ class TokenizedTreeGenerateReqInput:
 # Marginal-value scheduling (EMVPT) knobs. The value proxy is the running mean
 # output-token logprob; a trained value head replaces it later. Prune fires only
 # when the proxy is actually flowing (all-zero scores never prune).
-VALUE_CHECK_INTERVAL = 16   # run-level tokens between prune checks
-VALUE_WARMUP_TOKENS = 8     # a branch is immune below this many own tokens
-VALUE_MARGIN = 0.35         # nats/token gap to the best sibling that kills
-VALUE_MIN_KEEP = 2          # never prune below this many alive branches
+# Env-overridable so ablations (prune off = large margin) need no code edit.
+import os as _os
+
+VALUE_CHECK_INTERVAL = int(_os.environ.get("AUTOTREE_VALUE_CHECK_INTERVAL", "16"))
+VALUE_WARMUP_TOKENS = int(_os.environ.get("AUTOTREE_VALUE_WARMUP_TOKENS", "8"))
+VALUE_MARGIN = float(_os.environ.get("AUTOTREE_VALUE_MARGIN", "0.35"))
+VALUE_MIN_KEEP = int(_os.environ.get("AUTOTREE_VALUE_MIN_KEEP", "2"))
 
 
 class _BranchState:
@@ -210,9 +213,50 @@ class SchedulerTreeRuntime:
             run.last_value_check = run.spent
             self._maybe_value_prune(run)
 
+        if state.branch_id == 0:
+            self._attach_snapshot(run)
+
         budget = int(run.params.get("budget_tokens", 0) or 0)
         if budget and run.spent >= budget and not run.finalized:
             self._finalize(run, reason="budget")
+
+    def _attach_snapshot(self, run: _TreeRun) -> None:
+        """Publish the live tree trace on the parent request. The output
+        streamer forwards ``customized_info`` to the tokenizer manager, which
+        merges it into ``meta_info`` - for non-streaming requests exactly once,
+        at finish, so the parent's final result carries the latest snapshot."""
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None:
+            return
+        alive = [b for b in run.branches.values() if b.state == "active"]
+        leading = max(
+            (b for b in run.branches.values() if b.tokens),
+            key=lambda b: b.mean_logprob(),
+            default=None,
+        )
+        snapshot = {
+            "policy": run.params.get("policy"),
+            "branch_count": len(run.branches),
+            "alive_count": len(alive),
+            "pruned_count": run.pruned,
+            "spent_tokens": run.spent,
+            "budget_tokens": int(run.params.get("budget_tokens", 0) or 0),
+            "winner_branch_id": (
+                str(run.winner_branch_id) if run.winner_branch_id is not None
+                else (str(leading.branch_id) if leading is not None else None)
+            ),
+            "winner_is_final": run.finalized,
+            "value_margin": VALUE_MARGIN,
+            "branches": {
+                str(b.branch_id): {
+                    "tokens": b.tokens,
+                    "mean_logprob": round(b.mean_logprob(), 4),
+                    "state": b.state,
+                }
+                for b in run.branches.values()
+            },
+        }
+        parent.req.customized_info = {"autotree": [snapshot]}
 
     def _maybe_value_prune(self, run: _TreeRun) -> None:
         """EMVPT: prune branches whose mean-logprob value proxy trails the best
@@ -291,6 +335,8 @@ class SchedulerTreeRuntime:
             if target is None:
                 continue
             target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
+
+        self._attach_snapshot(run)
 
 
 _ACTIVE: Optional[SchedulerTreeRuntime] = None
