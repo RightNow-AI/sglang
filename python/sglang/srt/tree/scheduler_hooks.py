@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 from array import array
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sglang.srt.tree.params import TreeGenerateReqInput
 
@@ -106,6 +106,35 @@ def on_branch_token(
     raise NotImplementedError
 
 
-def apply_kill(branch: Any, *, tree_cache: Any, reason: str = "policy") -> None:
-    """Mark a branch for finish and release only its radix-lock hold."""
-    raise NotImplementedError
+def apply_kill(
+    branch: Any,
+    *,
+    tree_cache: Any,
+    reason: str = "policy",
+    release_fn: Optional[Callable[..., None]] = None,
+    finish_reason_factory: Optional[Callable[[str], Any]] = None,
+) -> bool:
+    """Prune one branch and reclaim its private KV exactly once.
+
+    ``release_kv_cache(..., is_insert=False)`` frees only indices after
+    ``cache_protected_len`` and drops the request's ``last_node`` lock. The
+    shared prefix is therefore never passed directly to an allocator.
+    """
+    if getattr(branch, "_tree_kv_released", False):
+        return False
+
+    if finish_reason_factory is None:
+        from sglang.srt.managers.schedule_batch import FINISH_ABORT
+
+        finish_reason_factory = lambda prune_reason: FINISH_ABORT(
+            f"tree branch pruned: {prune_reason}"
+        )
+    if release_fn is None:
+        from sglang.srt.mem_cache.common import release_kv_cache
+
+        release_fn = release_kv_cache
+
+    branch.to_finish = finish_reason_factory(reason)
+    release_fn(branch, tree_cache, is_insert=False)
+    branch._tree_kv_released = True
+    return True
