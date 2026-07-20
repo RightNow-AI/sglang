@@ -155,8 +155,8 @@ ARG GPU_ARCH=gfx950
 ENV GPU_ARCH_LIST=${GPU_ARCH%-*}
 ENV PYTORCH_ROCM_ARCH=gfx942;gfx950
 
-ARG SGL_REPO="https://github.com/sgl-project/sglang.git"
-ARG SGL_DEFAULT="main"
+ARG SGL_REPO="https://github.com/akao-amd/sglang.git"
+ARG SGL_DEFAULT="scout-therock"
 ARG SGL_BRANCH=${SGL_DEFAULT}
 
 # Version override for setuptools_scm (used in nightly builds)
@@ -392,8 +392,8 @@ RUN pip install IPython \
     && pip install pybind11
 
 RUN pip uninstall -y sgl_kernel sglang
-RUN git clone ${SGL_REPO} \
-    && cd sglang \
+RUN git clone ${SGL_REPO}
+RUN cd sglang \
     && if [ "${SGL_BRANCH}" = ${SGL_DEFAULT} ]; then \
          echo "Using ${SGL_DEFAULT}, default branch."; \
          git checkout ${SGL_DEFAULT}; \
