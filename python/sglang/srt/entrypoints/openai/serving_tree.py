@@ -113,12 +113,58 @@ class OpenAIServingTree(OpenAIServingBase):
             return self.create_error_response(str(error))
 
         if not isinstance(result, TreeResult):
+            result = self._coerce_plain_result(result, adapted_request)
+        if result is None:
             return self.create_error_response(
                 "Tree scheduler returned an invalid result envelope.",
                 err_type="InternalServerError",
                 status_code=500,
             )
         return self._build_completion_response(request, result)
+
+    def _coerce_plain_result(self, result, adapted_request) -> Optional[TreeResult]:
+        """Phase-1 fallback: the runtime engine executes the tree in the
+        scheduler (fork, prefix-KV sharing, budget finalize) and returns the
+        winning branch as an ordinary completion. Until the per-branch trace is
+        surfaced through the wire, build a minimal TreeResult that reports only
+        what is known: the winner's text and the requested branch count. Every
+        per-branch statistic is left null rather than fabricated.
+        """
+        if not isinstance(result, dict):
+            return None
+        text = result.get("text")
+        if text is None:
+            return None
+        meta = result.get("meta_info") or {}
+        prompt_tokens = int(meta.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(meta.get("completion_tokens", 0) or 0)
+        finish = meta.get("finish_reason")
+        finish_reason = (
+            finish.get("type", "stop") if isinstance(finish, dict) else "stop"
+        )
+        params = getattr(adapted_request, "tree", None)
+        branch_count = int(getattr(params, "branches", 1) or 1)
+        scorer = getattr(params, "scorer", None)
+        policy = getattr(params, "policy", "beam")
+        summary = TreeSummary(
+            policy=policy,
+            branch_count=branch_count,
+            pruned_count=0,
+            merged_count=0,
+            winner_branch_id="0",
+            tokens_spent_per_branch={},
+            final_scores={},
+            scorer=scorer,
+            kv_reuse_ratio=None,
+        )
+        return TreeResult(
+            winner_text=text,
+            winner_token_ids=list(meta.get("output_ids", []) or []),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            summary=summary,
+            finish_reason=finish_reason,
+        )
 
     async def _handle_streaming_request(
         self,
