@@ -1,0 +1,51 @@
+name: Upstream sync check
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  rebase-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tree-engine
+          fetch-depth: 0
+      - name: Attempt rebase onto upstream main
+        id: rebase
+        run: |
+          git remote add upstream https://github.com/sgl-project/sglang.git
+          git fetch upstream main --depth 200
+          git config user.name "sync-check"
+          git config user.email "sync-check@users.noreply.github.com"
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if git rebase upstream/main; then
+            echo "result=clean" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run tree suites on rebased code
+        if: steps.rebase.outputs.result == 'clean'
+        run: |
+          pip install pytest pytest-asyncio pydantic
+          python -m pytest test/registered/unit/tree/ test/registered/unit/tree_api/ -q || echo "suite=red" >> "$GITHUB_OUTPUT"
+      - name: Report
+        run: |
+          echo "Upstream commits ahead: ${{ steps.rebase.outputs.behind }}"
+          echo "Rebase result: ${{ steps.rebase.outputs.result }}"
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.result == 'conflict'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Upstream rebase conflict (${new Date().toISOString().slice(0,10)})`,
+              body: "Weekly sync check: rebasing tree-engine onto sgl-project/sglang main hit conflicts. Resolve promptly; fork drift is the existential risk.",
+            });
