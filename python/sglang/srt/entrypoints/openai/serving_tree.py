@@ -150,15 +150,40 @@ class OpenAIServingTree(OpenAIServingBase):
         # The scheduler runtime publishes its live trace through the
         # customized_info channel; the last snapshot is authoritative.
         snapshots = meta.get("autotree")
-        snap = snapshots[-1] if isinstance(snapshots, list) and snapshots else None
+        snap = None
+        if isinstance(snapshots, list):
+            # token-aligned channel: entries are None padding except where the
+            # runtime placed a snapshot; the last real one is authoritative
+            real = [s for s in snapshots if isinstance(s, dict)]
+            snap = real[-1] if real else None
         if isinstance(snap, dict):
             branches = snap.get("branches") or {}
+            winner_id = str(snap.get("winner_branch_id") or "0")
+            winner_ids = list(meta.get("output_ids", []) or [])
+            used_scorer = scorer or "mean_logprob"
+
+            # Self-consistency winner selection: when the final snapshot carries
+            # every branch's token ids, detokenize each, extract the final
+            # answer, and take the majority. Ties and no-answer cases fall back
+            # to the value proxy's leading branch.
+            branch_texts = self._detokenize_branches(branches)
+            if branch_texts:
+                voted = self._self_consistency_vote(branches, branch_texts)
+                if voted is not None:
+                    winner_id = voted
+                    text = branch_texts[voted]
+                    winner_ids = list(
+                        (branches.get(voted) or {}).get("output_ids") or []
+                    )
+                    completion_tokens = len(winner_ids) or completion_tokens
+                    used_scorer = "self_consistency"
+
             summary = TreeSummary(
                 policy=snap.get("policy") or policy,
                 branch_count=int(snap.get("branch_count") or branch_count),
                 pruned_count=int(snap.get("pruned_count") or 0),
                 merged_count=0,
-                winner_branch_id=str(snap.get("winner_branch_id") or "0"),
+                winner_branch_id=winner_id,
                 tokens_spent_per_branch={
                     bid: int(b.get("tokens", 0)) for bid, b in branches.items()
                 },
@@ -167,12 +192,12 @@ class OpenAIServingTree(OpenAIServingBase):
                     for bid, b in branches.items()
                     if b.get("tokens")
                 },
-                scorer=scorer or "mean_logprob",
+                scorer=used_scorer,
                 kv_reuse_ratio=None,
             )
             return TreeResult(
                 winner_text=text,
-                winner_token_ids=list(meta.get("output_ids", []) or []),
+                winner_token_ids=winner_ids,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 summary=summary,
@@ -197,6 +222,76 @@ class OpenAIServingTree(OpenAIServingBase):
             completion_tokens=completion_tokens,
             summary=summary,
             finish_reason=finish_reason,
+        )
+
+    def _detokenize_branches(self, branches: dict) -> Optional[dict]:
+        """Decode each branch's output ids to text, trimmed at the first EOS
+        (the parent runs with ignore_eos while it waits for its siblings, so
+        anything past its natural EOS is scaffolding, not answer)."""
+        tokenizer = getattr(self.tokenizer_manager, "tokenizer", None)
+        if tokenizer is None:
+            return None
+        eos_id = getattr(tokenizer, "eos_token_id", None)
+        texts = {}
+        for bid, info in branches.items():
+            ids = list((info or {}).get("output_ids") or [])
+            if not ids:
+                return None
+            if eos_id is not None and eos_id in ids:
+                ids = ids[: ids.index(eos_id)]
+            texts[bid] = tokenizer.decode(ids, skip_special_tokens=True)
+        return texts or None
+
+    @staticmethod
+    def _extract_answer(text: str) -> Optional[str]:
+        """Final-answer extraction: prefer '#### <number>', else the last
+        number in the text. Mirrors autotree-core answers.py."""
+        import re
+
+        marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
+        raw = marked[-1] if marked else None
+        if raw is None:
+            numbers = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
+            raw = numbers[-1] if numbers else None
+        if raw is None:
+            return None
+        raw = raw.replace(",", "").rstrip(".")
+        try:
+            value = float(raw)
+            return str(int(value)) if value == int(value) else str(value)
+        except ValueError:
+            return None
+
+    def _self_consistency_vote(
+        self, branches: dict, branch_texts: dict
+    ) -> Optional[str]:
+        """Majority vote over extracted answers; ties break toward the higher
+        mean-logprob branch. Returns None when no branch yields an answer."""
+        answers = {
+            bid: self._extract_answer(t) for bid, t in branch_texts.items()
+        }
+        counts: dict = {}
+        for bid, ans in answers.items():
+            if ans is not None:
+                counts.setdefault(ans, []).append(bid)
+        if not counts:
+            return None
+        best_answer = max(
+            counts.items(),
+            key=lambda kv: (
+                len(kv[1]),
+                max(
+                    float((branches.get(b) or {}).get("mean_logprob", -1e9))
+                    for b in kv[1]
+                ),
+            ),
+        )
+        voters = best_answer[1]
+        return max(
+            voters,
+            key=lambda b: float(
+                (branches.get(b) or {}).get("mean_logprob", -1e9)
+            ),
         )
 
     async def _handle_streaming_request(

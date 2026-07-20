@@ -75,6 +75,7 @@ class _TreeRun:
     __slots__ = (
         "parent_rid", "params", "branches", "spent", "finalized",
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
+        "orig_sampling",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -87,6 +88,7 @@ class _TreeRun:
         self.winner_branch_id: Optional[int] = None
         self.pruned = 0
         self.last_value_check = 0
+        self.orig_sampling = None
 
 
 class SchedulerTreeRuntime:
@@ -107,6 +109,22 @@ class SchedulerTreeRuntime:
             run.base_tokenized = recv.base
             self.runs[recv.rid] = run
             self.branch_index[recv.rid] = run
+            # Hold the parent past its natural EOS: it is the wire carrier, and
+            # winner selection needs every sibling finished before the parent's
+            # final result (with the full tree snapshot) streams out. Siblings
+            # keep the caller's original sampling; the budget stays the hard cap.
+            sp = getattr(recv.base, "sampling_params", None)
+            if sp is not None and int(params.get("branches", 1) or 1) > 1:
+                try:
+                    run.orig_sampling = (
+                        getattr(sp, "max_new_tokens", None),
+                        getattr(sp, "ignore_eos", False),
+                    )
+                    if getattr(sp, "max_new_tokens", None) is not None:
+                        sp.max_new_tokens = sp.max_new_tokens + 64
+                    sp.ignore_eos = True
+                except Exception:
+                    run.orig_sampling = None
             logger.info(
                 "[tree] request %s policy=%s branches=%s budget=%s",
                 recv.rid, params.get("policy"), params.get("branches"),
@@ -156,6 +174,12 @@ class SchedulerTreeRuntime:
             child_rid = f"{run.parent_rid}#tree{b}"
             sp = getattr(base, "sampling_params", None)
             child_sp = copy.copy(sp) if sp is not None else sp
+            if child_sp is not None and run.orig_sampling is not None:
+                # children keep the caller's sampling; only the parent is held
+                try:
+                    child_sp.max_new_tokens, child_sp.ignore_eos = run.orig_sampling
+                except Exception:
+                    pass
             seed = getattr(child_sp, "seed", None)
             if child_sp is not None and seed is not None:
                 try:
@@ -215,12 +239,21 @@ class SchedulerTreeRuntime:
 
         if state.branch_id == 0:
             self._attach_snapshot(run)
+            if not run.finalized and len(run.branches) > 1:
+                siblings = [
+                    b for b in run.branches.values() if b.branch_id != 0
+                ]
+                if siblings and all(
+                    b.req is not None and b.req.finished() for b in siblings
+                ):
+                    self._finalize(run, reason="siblings_done")
+                    return
 
         budget = int(run.params.get("budget_tokens", 0) or 0)
         if budget and run.spent >= budget and not run.finalized:
             self._finalize(run, reason="budget")
 
-    def _attach_snapshot(self, run: _TreeRun) -> None:
+    def _attach_snapshot(self, run: _TreeRun, include_outputs: bool = False) -> None:
         """Publish the live tree trace on the parent request. The output
         streamer forwards ``customized_info`` to the tokenizer manager, which
         merges it into ``meta_info`` - for non-streaming requests exactly once,
@@ -252,11 +285,23 @@ class SchedulerTreeRuntime:
                     "tokens": b.tokens,
                     "mean_logprob": round(b.mean_logprob(), 4),
                     "state": b.state,
+                    **(
+                        {"output_ids": list(b.req.output_ids)}
+                        if include_outputs and b.req is not None
+                        else {}
+                    ),
                 }
                 for b in run.branches.values()
             },
         }
-        parent.req.customized_info = {"autotree": [snapshot]}
+        # The customized_info channel is token-aligned: the output streamer
+        # slices the value list by the token range of each chunk. Place the
+        # snapshot at the parent's newest token index (not yet streamed) so it
+        # rides out on the next chunk; earlier indices are padding.
+        n = len(parent.req.output_ids)
+        values: list = [None] * max(n, 1)
+        values[-1] = snapshot
+        parent.req.customized_info = {"autotree": values}
 
     def _maybe_value_prune(self, run: _TreeRun) -> None:
         """EMVPT: prune branches whose mean-logprob value proxy trails the best
@@ -336,7 +381,7 @@ class SchedulerTreeRuntime:
                 continue
             target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
 
-        self._attach_snapshot(run)
+        self._attach_snapshot(run, include_outputs=True)
 
 
 _ACTIVE: Optional[SchedulerTreeRuntime] = None
