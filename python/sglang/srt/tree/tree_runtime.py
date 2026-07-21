@@ -471,7 +471,10 @@ _ACTIVE: Optional[SchedulerTreeRuntime] = None
 
 
 def get_active() -> Optional[SchedulerTreeRuntime]:
-    return _ACTIVE
+    runtime = _ACTIVE
+    if runtime is None:
+        return None
+    return runtime if any(not run.finalized for run in runtime.runs.values()) else None
 
 
 def install(scheduler: Any) -> SchedulerTreeRuntime:

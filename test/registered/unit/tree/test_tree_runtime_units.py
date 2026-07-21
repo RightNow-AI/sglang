@@ -71,6 +71,22 @@ def test_tree_run_starts_with_isolated_empty_state():
     assert second.last_value_check == 0
 
 
+def test_get_active_only_exposes_runtime_during_unfinished_tree_run(monkeypatch):
+    monkeypatch.setattr(tree_runtime, "_ACTIVE", None)
+    scheduler = SimpleNamespace()
+    runtime = tree_runtime.install(scheduler)
+
+    assert scheduler.tree_runtime is runtime
+    assert tree_runtime.get_active() is None
+
+    run = tree_runtime._TreeRun("parent", {})
+    runtime.runs[run.parent_rid] = run
+    assert tree_runtime.get_active() is runtime
+
+    run.finalized = True
+    assert tree_runtime.get_active() is None
+
+
 def test_value_prune_honors_margin_and_min_keep(monkeypatch):
     install_fake_finish_reason(monkeypatch)
     monkeypatch.setattr(tree_runtime, "VALUE_WARMUP_TOKENS", 8)
