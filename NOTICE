@@ -1,0 +1,13 @@
+AutoTree
+Copyright 2026 RightNow AI
+
+This product is a fork of SGLang (https://github.com/sgl-project/sglang),
+licensed under the Apache License, Version 2.0. The original SGLang copyright
+and license are retained in full (see LICENSE).
+
+Modifications and additions by RightNow AI (the "AutoTree" tree-execution
+engine) are also licensed under the Apache License, Version 2.0. The
+AutoTree-added and AutoTree-modified paths are enumerated in docs/PROVENANCE.md.
+
+This software may include third-party components under their own licenses;
+those licenses continue to apply to their respective components.
