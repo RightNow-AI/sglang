@@ -34,7 +34,7 @@ jobs:
           cache: pip
 
       - name: Install minimal test dependencies
-        run: python -m pip install pytest fastapi
+        run: python -m pip install pytest fastapi msgspec
 
       - name: Stage lightweight SGLang namespace
         run: >-
@@ -50,4 +50,4 @@ jobs:
 
       - name: Add job summary
         if: always()
-        run: echo "Tree CPU suite completed with Python 3.12 and minimal dependencies (pytest + fastapi)." >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Tree CPU suite completed with Python 3.12 and minimal dependencies (pytest + fastapi + msgspec)." >> "$GITHUB_STEP_SUMMARY"
