@@ -136,3 +136,35 @@ def test_coerce_plain_result_parses_last_snapshot_and_votes():
     assert result.summary.winner_branch_id == "1"
     assert result.summary.scorer == "self_consistency"
     assert result.summary.tokens_spent_per_branch == {"0": 1, "1": 1, "2": 1}
+
+
+def test_coerce_plain_result_ignores_empty_branch_outputs_when_voting():
+    serving = serving_without_init(FakeTokenizer())
+    snapshot = {
+        "policy": "beam",
+        "branch_count": 4,
+        "pruned_count": 1,
+        "winner_branch_id": "0",
+        "branches": {
+            "0": {"tokens": 1, "mean_logprob": -0.1, "output_ids": [1, 99]},
+            "1": {"tokens": 0, "mean_logprob": 0.0, "output_ids": []},
+            "2": {"tokens": 1, "mean_logprob": -0.2, "output_ids": [2, 99]},
+            "3": {"tokens": 1, "mean_logprob": -0.4, "output_ids": [3, 99]},
+        },
+    }
+    plain = {
+        "text": "parent fallback",
+        "meta_info": {
+            "output_ids": [1, 99],
+            "autotree": [snapshot],
+        },
+    }
+    adapted = SimpleNamespace(
+        tree=SimpleNamespace(policy="beam", branches=4, scorer=None)
+    )
+
+    result = serving._coerce_plain_result(plain, adapted)
+
+    assert result.summary.winner_branch_id == "2"
+    assert result.winner_text == "reasoning, answer #### 42"
+    assert result.summary.scorer == "self_consistency"

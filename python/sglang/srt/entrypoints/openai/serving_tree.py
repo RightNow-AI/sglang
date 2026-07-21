@@ -236,7 +236,7 @@ class OpenAIServingTree(OpenAIServingBase):
         for bid, info in branches.items():
             ids = list((info or {}).get("output_ids") or [])
             if not ids:
-                return None
+                continue
             if eos_id is not None and eos_id in ids:
                 ids = ids[: ids.index(eos_id)]
             texts[bid] = tokenizer.decode(ids, skip_special_tokens=True)
