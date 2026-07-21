@@ -58,6 +58,7 @@ def test_convert_tree_request_to_internal_envelope():
                 "branches": 5,
                 "budget_tokens": 321,
                 "scorer": "reward-v1",
+                "fork_at_text": "</plan>",
             },
         }
     )
@@ -71,6 +72,7 @@ def test_convert_tree_request_to_internal_envelope():
     assert adapted.tree.branches == 5
     assert adapted.tree.budget_tokens == 321
     assert adapted.tree.scorer == "reward-v1"
+    assert adapted.tree.fork_at_text == "</plan>"
     assert adapted.base.input_ids == [11, 12, 13]
     assert adapted.base.stream is True
     assert adapted.base.return_logprob is True

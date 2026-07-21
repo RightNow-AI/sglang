@@ -21,6 +21,7 @@ class TreeParams:
     branches: int = 4
     budget_tokens: int = 1024
     scorer: Optional[str] = None
+    fork_at_text: Optional[str] = None
 
     def validate(self) -> None:
         if self.policy not in TREE_POLICIES:
@@ -29,6 +30,14 @@ class TreeParams:
             raise ValueError("branches must be a positive integer")
         if not isinstance(self.budget_tokens, int) or self.budget_tokens < 1:
             raise ValueError("budget_tokens must be a positive integer")
+        if self.fork_at_text is not None:
+            if not isinstance(self.fork_at_text, str) or not self.fork_at_text:
+                raise ValueError("fork_at_text must be a non-empty string")
+            if len(self.fork_at_text) > 64:
+                raise ValueError("fork_at_text must be at most 64 characters")
+
+    def to_runtime_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
 
 
 @dataclasses.dataclass

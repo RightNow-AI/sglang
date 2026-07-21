@@ -239,6 +239,8 @@ class SchedulerBatchResultProcessor:
                         tr.on_prefill_done(req)
 
                     req.update_finish_state()
+                    if tr is not None and req.finished():
+                        tr.on_request_finished(req)
                     if req.finished():
                         self._maybe_collect_routed_experts(req)
                         self._maybe_collect_indexer_topk(req)
@@ -719,6 +721,8 @@ class SchedulerBatchResultProcessor:
             self._maybe_update_reasoning_tokens(req, next_token_id)
             req.time_stats.set_last_decode_finish_time()
             req.update_finish_state(new_accept_len)
+            if _tr is not None and req.finished():
+                _tr.on_request_finished(req)
 
             self._handle_finish_state_updated_req(req, batch, result, i, logits_output)
 

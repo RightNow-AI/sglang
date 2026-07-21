@@ -27,6 +27,7 @@ class TreeParameters(BaseModel):
     branches: int = Field(ge=1, le=64)
     budget_tokens: int = Field(ge=1, le=1_000_000)
     scorer: Optional[str] = None
+    fork_at_text: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 class TreeStreamOptions(BaseModel):

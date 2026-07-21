@@ -93,6 +93,7 @@ class OpenAIServingTree(OpenAIServingBase):
                 branches=request.tree.branches,
                 budget_tokens=request.tree.budget_tokens,
                 scorer=request.tree.scorer,
+                fork_at_text=request.tree.fork_at_text,
             ),
         )
         tree_request.tree.validate()

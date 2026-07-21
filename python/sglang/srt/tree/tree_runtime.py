@@ -1,19 +1,20 @@
 """Phase-1 tree runtime for the SGLang 0.5.15 scheduler (container base).
 
-Parent request doubles as branch 0. When its prefill completes, sibling
-branches are spawned as ordinary requests whose prompts radix-share the
-parent's prefix. Per-token hooks feed the tree manager; kills reuse the
-scheduler's abort path; at finalize the winner's tokens are copied onto the
-parent so the existing result channel returns the winning answer under the
-parent rid. All hooks are defensive: a tree bug degrades to plain generation,
-never a scheduler crash.
+Parent request doubles as branch 0. By default, sibling branches are spawned
+after prefill as ordinary requests whose prompts radix-share the parent. A
+request may instead wait for a text delimiter and publish the parent's
+generated KV under a fork-local cache namespace before spawning siblings.
+Per-token hooks feed the tree manager; kills reuse the scheduler's abort path;
+the parent remains the wire carrier for the final tree snapshot. All hooks are
+defensive: a tree bug degrades to plain generation, never a scheduler crash.
 """
 
 from __future__ import annotations
 
 import copy
-
 import logging
+import os as _os
+import secrets
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,6 @@ class TokenizedTreeGenerateReqInput:
 # output-token logprob; a trained value head replaces it later. Prune fires only
 # when the proxy is actually flowing (all-zero scores never prune).
 # Env-overridable so ablations (prune off = large margin) need no code edit.
-import os as _os
 
 VALUE_CHECK_INTERVAL = int(_os.environ.get("AUTOTREE_VALUE_CHECK_INTERVAL", "16"))
 VALUE_WARMUP_TOKENS = int(_os.environ.get("AUTOTREE_VALUE_WARMUP_TOKENS", "8"))
@@ -83,7 +83,8 @@ class _TreeRun:
     __slots__ = (
         "parent_rid", "params", "branches", "spent", "finalized",
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
-        "orig_sampling",
+        "orig_sampling", "forked", "fork_attempted", "cache_namespace",
+        "fork_cache_supported",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -97,6 +98,10 @@ class _TreeRun:
         self.pruned = 0
         self.last_value_check = 0
         self.orig_sampling = None
+        self.forked = False
+        self.fork_attempted = False
+        self.cache_namespace = None
+        self.fork_cache_supported = False
 
 
 class SchedulerTreeRuntime:
@@ -114,6 +119,31 @@ class SchedulerTreeRuntime:
         try:
             params = dict(recv.tree)
             run = _TreeRun(recv.rid, params)
+            branch_count = max(1, int(params.get("branches", 1) or 1))
+            delayed_fork = params.get("fork_at_text") is not None and branch_count > 1
+            if delayed_fork:
+                tree_cache = getattr(self.scheduler, "tree_cache", None)
+                run.fork_cache_supported = self._cache_supports_fork_namespaces(
+                    tree_cache
+                )
+                if run.fork_cache_supported:
+                    import msgspec
+
+                    original_key = getattr(recv.base, "extra_key", None)
+                    namespace = f"autotree-fork:{secrets.token_hex(16)}"
+                    if original_key:
+                        namespace = f"{original_key}|{namespace}"
+                    recv.base = msgspec.structs.replace(
+                        recv.base, extra_key=namespace
+                    )
+                    run.cache_namespace = namespace
+                else:
+                    logger.error(
+                        "[tree] %s delayed fork disabled: cache %s does not "
+                        "guarantee extra_key isolation",
+                        recv.rid,
+                        type(tree_cache).__name__ if tree_cache is not None else None,
+                    )
             run.base_tokenized = recv.base
             self.runs[recv.rid] = run
             self.branch_index[recv.rid] = run
@@ -122,15 +152,14 @@ class SchedulerTreeRuntime:
             # final result (with the full tree snapshot) streams out. Siblings
             # keep the caller's original sampling; the budget stays the hard cap.
             sp = getattr(recv.base, "sampling_params", None)
-            if sp is not None and int(params.get("branches", 1) or 1) > 1:
+            if sp is not None and branch_count > 1:
                 try:
                     run.orig_sampling = (
                         getattr(sp, "max_new_tokens", None),
                         getattr(sp, "ignore_eos", False),
                     )
-                    if getattr(sp, "max_new_tokens", None) is not None:
-                        sp.max_new_tokens = sp.max_new_tokens + 64
-                    sp.ignore_eos = True
+                    if not delayed_fork:
+                        self._hold_parent(run, recv.base)
                 except Exception:
                     run.orig_sampling = None
             logger.info(
@@ -149,6 +178,10 @@ class SchedulerTreeRuntime:
         if run is None or run.branches:
             return
         try:
+            if self._uses_delayed_fork(run):
+                run.branches["0"] = _BranchState(req.rid, 0, req)
+                self._maybe_trigger_delayed_fork(run, req)
+                return
             self._fork_branches(run, req)
         except Exception:
             logger.exception("[tree] fork failed; parent continues alone")
@@ -164,11 +197,178 @@ class SchedulerTreeRuntime:
         except Exception:
             logger.exception("[tree] token hook failed for %s", req.rid)
 
+    def on_request_finished(self, req: Any) -> None:
+        """Finish a delimiter-gated request that never reached its trigger."""
+        run = self.branch_index.get(req.rid)
+        if (
+            run is None
+            or run.finalized
+            or req.rid != run.parent_rid
+            or not self._uses_delayed_fork(run)
+            or run.forked
+        ):
+            return
+        parent = run.branches.get("0")
+        if parent is None:
+            parent = _BranchState(req.rid, 0, req)
+            run.branches["0"] = parent
+        parent.req = req
+        parent.state = "finalized"
+        run.finalized = True
+        run.winner_branch_id = 0
+        self._attach_snapshot(run, include_outputs=True)
+        logger.info(
+            "[tree] %s delimiter not found; returning parent only", run.parent_rid
+        )
+
     # -- internals ---------------------------------------------------------
 
-    def _fork_branches(self, run: _TreeRun, parent_req: Any) -> None:
+    @staticmethod
+    def _uses_delayed_fork(run: _TreeRun) -> bool:
+        return (
+            run.params.get("fork_at_text") is not None
+            and max(1, int(run.params.get("branches", 1) or 1)) > 1
+        )
+
+    @classmethod
+    def _cache_supports_fork_namespaces(cls, tree_cache: Any) -> bool:
+        """Allow only caches whose prefix lookup includes RadixKey.extra_key.
+
+        The C++ radix cache currently passes raw token ids to its tree and is
+        intentionally absent from this allowlist.
+        """
+        if tree_cache is None or bool(getattr(tree_cache, "disable", False)):
+            return False
+        marker = getattr(tree_cache, "supports_tree_fork_namespaces", None)
+        if marker is not None:
+            return bool(marker)
+        inner = getattr(tree_cache, "inner", None)
+        if inner is not None and inner is not tree_cache:
+            return cls._cache_supports_fork_namespaces(inner)
+        safe_bases = {
+            ("sglang.srt.mem_cache.radix_cache", "RadixCache"),
+            ("sglang.srt.mem_cache.swa_radix_cache", "SWARadixCache"),
+            ("sglang.srt.mem_cache.mamba_radix_cache", "MambaRadixCache"),
+            ("sglang.srt.mem_cache.unified_radix_cache", "UnifiedRadixCache"),
+        }
+        return any(
+            (base.__module__, base.__name__) in safe_bases
+            for base in type(tree_cache).__mro__
+        )
+
+    def _hold_parent(self, run: _TreeRun, parent: Any) -> None:
+        sp = getattr(parent, "sampling_params", None)
+        if sp is None or run.orig_sampling is None:
+            return
+        original_max, _ = run.orig_sampling
+        if original_max is not None:
+            sp.max_new_tokens = original_max + 64
+        sp.ignore_eos = True
+
+    def _restore_parent_sampling(self, run: _TreeRun, parent_req: Any) -> None:
+        sp = getattr(parent_req, "sampling_params", None)
+        if sp is None or run.orig_sampling is None:
+            return
+        sp.max_new_tokens, sp.ignore_eos = run.orig_sampling
+
+    def _maybe_trigger_delayed_fork(self, run: _TreeRun, parent_req: Any) -> bool:
+        if run.forked or run.fork_attempted:
+            return False
+        delimiter = run.params.get("fork_at_text")
+        tokenizer = getattr(self.scheduler, "tokenizer", None)
+        if not delimiter or tokenizer is None:
+            return False
+        output_ids = list(getattr(parent_req, "output_ids", ()))
+        if not output_ids:
+            return False
+        tail_tokens = max(24, len(delimiter) + 4)
+        try:
+            tail = tokenizer.decode(
+                output_ids[-tail_tokens:], skip_special_tokens=False
+            )
+        except Exception:
+            logger.exception("[tree] delimiter decode failed for %s", run.parent_rid)
+            return False
+        if delimiter not in tail:
+            return False
+
+        run.fork_attempted = True
+        if not run.fork_cache_supported:
+            logger.error(
+                "[tree] %s delimiter reached but fork was refused: no isolated "
+                "radix namespace",
+                run.parent_rid,
+            )
+            return True
+
+        fork_output_len = len(output_ids)
+        try:
+            self._cache_parent_generated(parent_req, fork_output_len)
+            self._hold_parent(run, parent_req)
+            parent = run.branches["0"]
+            parent.tokens = 0
+            parent.score = 0.0
+            vals = getattr(parent_req, "output_token_logprobs_val", None)
+            parent.lp_seen = len(vals) if vals else 0
+            run.spent = 0
+            run.last_value_check = 0
+            child_input_ids = (
+                parent_req.origin_input_ids
+                + parent_req.output_ids[:fork_output_len]
+            )
+            self._fork_branches(
+                run, parent_req, child_input_ids=child_input_ids
+            )
+            logger.info(
+                "[tree] forked %d at delimiter (k=%d)",
+                max(0, int(run.params.get("branches", 1) or 1) - 1),
+                fork_output_len,
+            )
+        except Exception:
+            if len(run.branches) <= 1:
+                self._restore_parent_sampling(run, parent_req)
+            logger.exception("[tree] delimiter fork failed; parent continues alone")
+        return True
+
+    def _cache_parent_generated(
+        self, parent_req: Any, fork_output_len: int
+    ) -> None:
+        tree_cache = getattr(self.scheduler, "tree_cache", None)
+        if not self._cache_supports_fork_namespaces(tree_cache):
+            raise RuntimeError("tree cache does not guarantee fork namespace isolation")
+        if getattr(parent_req, "skip_radix_cache_insert", False):
+            raise RuntimeError("request is not eligible for radix cache insertion")
+
+        fork_input_len = len(parent_req.origin_input_ids) + fork_output_len
+        max_reusable_len = max(0, fork_input_len - 1)
+        committed_len = min(
+            int(getattr(parent_req, "kv_committed_len", max_reusable_len)),
+            max_reusable_len,
+        )
+        if committed_len <= 0:
+            raise RuntimeError("parent has no committed KV to publish")
+        refresh = getattr(parent_req, "_refresh_fill_ids", None)
+        set_range = getattr(parent_req, "set_extend_range", None)
+        if refresh is None or set_range is None:
+            raise RuntimeError("parent request cannot expose committed fill ids")
+
+        old_range = parent_req.extend_range
+        refresh()
+        set_range(0, committed_len)
+        try:
+            tree_cache.cache_unfinished_req(parent_req)
+        finally:
+            parent_req.extend_range = old_range
+
+    def _fork_branches(
+        self, run: _TreeRun, parent_req: Any, child_input_ids: Any = None
+    ) -> None:
         n = max(1, int(run.params.get("branches", 1)))
-        run.branches["0"] = _BranchState(parent_req.rid, 0, parent_req)
+        parent = run.branches.get("0")
+        if parent is None:
+            run.branches["0"] = _BranchState(parent_req.rid, 0, parent_req)
+        else:
+            parent.req = parent_req
 
         base = run.base_tokenized
         if base is None:
@@ -194,15 +394,17 @@ class SchedulerTreeRuntime:
                     child_sp.seed = seed + b
                 except Exception:
                     pass
-            child_base = msgspec.structs.replace(
-                base, rid=child_rid, sampling_params=child_sp
-            )
+            replacements = {"rid": child_rid, "sampling_params": child_sp}
+            if child_input_ids is not None:
+                replacements["input_ids"] = child_input_ids
+            child_base = msgspec.structs.replace(base, **replacements)
             # Route through the real intake path: all Req invariants and radix
             # prefix-sharing are established exactly as for a normal request.
             self.scheduler.handle_generate_request(child_base)
             branch = _BranchState(child_rid, b, None)
             run.branches[str(b)] = branch
             self.branch_index[child_rid] = run
+        run.forked = n > 1
         logger.info(
             "[tree] %s forked %d sibling branches via intake path",
             run.parent_rid, n - 1,
@@ -220,6 +422,10 @@ class SchedulerTreeRuntime:
             return
         if state.req is None:
             state.req = req  # capture the real Req the scheduler created
+
+        if state.branch_id == 0 and self._uses_delayed_fork(run) and not run.forked:
+            self._maybe_trigger_delayed_fork(run, req)
+            return
 
         count = len(token_ids) if hasattr(token_ids, "__len__") else 1
         state.tokens += count
