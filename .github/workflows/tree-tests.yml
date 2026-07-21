@@ -1,0 +1,53 @@
+name: Tree CPU tests
+
+on:
+  push:
+    branches:
+      - tree-engine
+    paths:
+      - "python/sglang/srt/tree/**"
+      - "python/sglang/srt/entrypoints/openai/*tree*"
+      - "test/registered/unit/tree/**"
+      - ".github/workflows/tree-tests.yml"
+  pull_request:
+    branches:
+      - tree-engine
+    paths:
+      - "python/sglang/srt/tree/**"
+      - "python/sglang/srt/entrypoints/openai/*tree*"
+      - "test/registered/unit/tree/**"
+      - ".github/workflows/tree-tests.yml"
+
+jobs:
+  tree-cpu-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TREE_CI_NAMESPACE: ${{ runner.temp }}/tree-python
+      PYTHONPATH: ${{ runner.temp }}/tree-python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install minimal test dependencies
+        run: python -m pip install pytest fastapi
+
+      - name: Stage lightweight SGLang namespace
+        run: >-
+          python -c "from pathlib import Path; import os, shutil;
+          root = Path(os.environ['TREE_CI_NAMESPACE']) / 'sglang';
+          root.mkdir(parents=True, exist_ok=True);
+          shutil.copytree('python/sglang/srt/tree', root / 'srt' / 'tree', dirs_exist_ok=True);
+          shutil.copytree('python/sglang/srt/entrypoints/openai', root / 'srt' / 'entrypoints' / 'openai', dirs_exist_ok=True);
+          shutil.copytree('python/sglang/test/ci', root / 'test' / 'ci', dirs_exist_ok=True)"
+
+      - name: Run tree CPU tests
+        run: python -m pytest test/registered/unit/tree -q
+
+      - name: Add job summary
+        if: always()
+        run: echo "Tree CPU suite completed with Python 3.12 and minimal dependencies (pytest + fastapi)." >> "$GITHUB_STEP_SUMMARY"

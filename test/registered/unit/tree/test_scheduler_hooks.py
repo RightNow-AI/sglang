@@ -2,7 +2,12 @@ from array import array
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import torch
+import pytest
+
+
+torch = pytest.importorskip(
+    "torch", reason="tensor-backed radix-cache tests require optional torch"
+)
 
 from sglang.srt.mem_cache.base_prefix_cache import EvictParams
 from sglang.srt.mem_cache.radix_cache import RadixCache
