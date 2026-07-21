@@ -89,6 +89,7 @@ patch(
                 "branches": getattr(tree, "branches", 1),
                 "budget_tokens": getattr(tree, "budget_tokens", 0),
                 "scorer": getattr(tree, "scorer", None),
+                "fork_at_text": getattr(tree, "fork_at_text", None),
             }}
             setattr(base, "_autotree_params", params)
             return base
