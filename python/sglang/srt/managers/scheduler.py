@@ -1331,8 +1331,15 @@ class Scheduler(
         )
 
     def init_request_dispatcher(self):
+        from sglang.srt.tree.tree_runtime import (
+            TokenizedTreeGenerateReqInput as TreeSpliceInput,
+        )
+        from sglang.srt.tree.tree_runtime import install as _install_tree_runtime
+
+        _install_tree_runtime(self)  # [autotree-splice]
         self._request_dispatcher = TypeBasedDispatcher(
             [
+                (TreeSpliceInput, self._autotree_dispatch),  # [autotree-splice]
                 (TokenizedGenerateReqInput, self.handle_generate_request),
                 (TokenizedEmbeddingReqInput, self.handle_embedding_request),
                 (BatchTokenizedGenerateReqInput, self.handle_batch_generate_request),
@@ -2068,6 +2075,13 @@ class Scheduler(
             # For non-session requests, clear features and mm_inputs
             mm_inputs.release_features()
             req.multimodal_inputs = None
+
+    def _autotree_dispatch(self, recv):  # [autotree-splice]
+        from sglang.srt.tree.tree_runtime import install
+
+        if not hasattr(self, "tree_runtime"):
+            install(self)
+        return self.tree_runtime.handle_tree_request(recv)
 
     def handle_generate_request(
         self,

@@ -94,13 +94,17 @@ from sglang.srt.entrypoints.openai.protocol import (
     TokenizeRequest,
     V1RerankReqInput,
 )
-from sglang.srt.entrypoints.openai.protocol_tree import TreeCompletionRequest
+from sglang.srt.entrypoints.openai.protocol_tree import (  # [autotree-splice]
+    TreeCompletionRequest,
+)
 from sglang.srt.entrypoints.openai.serving_classify import OpenAIServingClassify
 from sglang.srt.entrypoints.openai.serving_completions import OpenAIServingCompletion
 from sglang.srt.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
 from sglang.srt.entrypoints.openai.serving_rerank import OpenAIServingRerank
 from sglang.srt.entrypoints.openai.serving_score import OpenAIServingScore
-from sglang.srt.entrypoints.openai.serving_tree import OpenAIServingTree
+from sglang.srt.entrypoints.openai.serving_tree import (  # [autotree-splice]
+    OpenAIServingTree,
+)
 from sglang.srt.entrypoints.openai.serving_tokenize import (
     OpenAIServingDetokenize,
     OpenAIServingTokenize,
@@ -305,7 +309,7 @@ async def lifespan(fast_api_app: FastAPI):
             _global_state.tokenizer_manager, _global_state.template_manager
         )
     )
-    fast_api_app.state.openai_serving_tree = OpenAIServingTree(
+    fast_api_app.state.openai_serving_tree = OpenAIServingTree(  # [autotree-splice]
         _global_state.tokenizer_manager, fast_api_app.state.openai_serving_chat
     )
     fast_api_app.state.openai_serving_embedding = OpenAIServingEmbedding(
@@ -1677,7 +1681,9 @@ async def openai_v1_chat_completions(
     )
 
 
-@app.post("/v1/tree/completions", dependencies=[Depends(validate_json_request)])
+@app.post(  # [autotree-splice]
+    "/v1/tree/completions", dependencies=[Depends(validate_json_request)]
+)
 async def openai_v1_tree_completions(
     request: TreeCompletionRequest, raw_request: Request
 ):

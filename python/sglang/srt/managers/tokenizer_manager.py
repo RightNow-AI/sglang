@@ -621,12 +621,32 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         self.sampling_params_class = SamplingParams
         self.signal_handler_class = SignalHandler
 
+    def _autotree_unwrap(self, obj):  # [autotree-splice]
+        tree = getattr(obj, "tree", None)
+        base = getattr(obj, "base", None)
+        if tree is not None and base is not None:
+            params = (
+                tree
+                if isinstance(tree, dict)
+                else {
+                    "policy": getattr(tree, "policy", "beam"),
+                    "branches": getattr(tree, "branches", 1),
+                    "budget_tokens": getattr(tree, "budget_tokens", 0),
+                    "scorer": getattr(tree, "scorer", None),
+                }
+            )
+            setattr(base, "_autotree_params", params)
+            return base
+        return obj
+
     async def generate_request(
         self,
         obj: Union[GenerateReqInput, EmbeddingReqInput],
         request: Optional[fastapi.Request] = None,
     ):
         self.auto_create_handle_loop()
+
+        obj = self._autotree_unwrap(obj)  # [autotree-splice]
 
         # Normalize the request
         obj.normalize_batch_and_arguments()
@@ -660,6 +680,15 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                 # Tokenize the request and send it to the scheduler
                 if obj.is_single:
                     tokenized_obj = await self._tokenize_one_request(obj)
+                    _tp = getattr(obj, "_autotree_params", None)  # [autotree-splice]
+                    if _tp is not None:
+                        from sglang.srt.tree.tree_runtime import (
+                            TokenizedTreeGenerateReqInput,
+                        )
+
+                        tokenized_obj = TokenizedTreeGenerateReqInput(
+                            base=tokenized_obj, tree=_tp
+                        )
                     state = self.rid_to_state[obj.rid]
                     if obj.return_prompt_token_ids:
                         state.prompt_token_ids = list(tokenized_obj.input_ids)
