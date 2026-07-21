@@ -127,12 +127,16 @@ patch(
 )
 patch(
     http,
-    "    fast_api_app.state.openai_serving_completion = ",
-    f"""    fast_api_app.state.openai_serving_tree = OpenAIServingTree(  {MARK}
-        _global_state.tokenizer_manager, _global_state.template_manager
+    """    fast_api_app.state.openai_serving_chat = (
+        _global_state.tokenizer_manager.serving_chat_class(
+            _global_state.tokenizer_manager, _global_state.template_manager
+        )
+    )""",
+    f"""
+    fast_api_app.state.openai_serving_tree = OpenAIServingTree(  {MARK}
+        _global_state.tokenizer_manager, fast_api_app.state.openai_serving_chat
     )
 """,
-    before=True,
 )
 patch(
     http,

@@ -233,6 +233,10 @@ class SchedulerBatchResultProcessor:
                     req.output_ids.append(next_token_id)
 
                     self._maybe_update_reasoning_tokens(req, next_token_id)
+                    from sglang.srt.tree.tree_runtime import get_active as _tr_get  # [autotree-splice]
+                    tr = _tr_get()
+                    if tr is not None:
+                        tr.on_prefill_done(req)
 
                     req.update_finish_state()
                     if req.finished():
@@ -706,6 +710,10 @@ class SchedulerBatchResultProcessor:
             is_spec = not batch.spec_algorithm.is_none()
 
             req.output_ids.extend(next_token_id)
+            from sglang.srt.tree.tree_runtime import get_active as _tr_get2  # [autotree-splice-decode]
+            _tr = _tr_get2()
+            if _tr is not None:
+                _tr.on_token(req, next_token_id, next_token_logprobs[i] if next_token_logprobs is not None else None)
             new_accept_len = len(next_token_id)
 
             self._maybe_update_reasoning_tokens(req, next_token_id)
