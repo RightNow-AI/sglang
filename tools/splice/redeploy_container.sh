@@ -4,6 +4,8 @@ set -u
 exec > >(tee -a ~/redeploy.log) 2>&1
 echo "=== redeploy $(date -u) ==="
 
+# Fresh boxes: the docker daemon must restart after boot for the NVIDIA hook
+sudo systemctl restart docker; sleep 5
 sudo docker rm -f treeval 2>/dev/null
 sudo docker run -d --name treeval --gpus all --shm-size 8g \
   -v ~/sglang:/fork --entrypoint sleep lmsysorg/sglang:latest infinity
