@@ -7,6 +7,18 @@ generated KV under a fork-local cache namespace before spawning siblings.
 Per-token hooks feed the tree manager; kills reuse the scheduler's abort path;
 the parent remains the wire carrier for the final tree snapshot. All hooks are
 defensive: a tree bug degrades to plain generation, never a scheduler crash.
+
+KV ownership stays with the stock scheduler: children use ordinary intake, so
+allocator exhaustion, retraction, finish, and release follow the non-tree
+paths. Fan-out is rejected before intake above AUTOTREE_MAX_BRANCHES (64 by
+default) to bound per-request pressure.
+
+For multi-branch runs the parent is retained past natural EOS by setting
+ignore_eos and adding 64 tokens to its limit. Normal tree finalization marks
+every branch to finish. If the client aborts, or the retained parent otherwise
+finishes first, cleanup marks every remaining child to finish and forgets all
+runtime references; the scheduler then releases their KV through its normal
+finish path.
 """
 
 from __future__ import annotations
@@ -18,6 +30,28 @@ import secrets
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# Intake and marginal-value scheduling knobs are environment-overridable so
+# operators can bound tenant fan-out and run policy ablations without edits.
+MAX_BRANCHES = int(_os.environ.get('AUTOTREE_MAX_BRANCHES', '64'))
+VALUE_CHECK_INTERVAL = int(_os.environ.get('AUTOTREE_VALUE_CHECK_INTERVAL', '16'))
+VALUE_WARMUP_TOKENS = int(_os.environ.get('AUTOTREE_VALUE_WARMUP_TOKENS', '8'))
+# Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
+# minority-correct branches (accuracy loss); the naive logprob proxy
+# cannot separate branches more finely. Lower this only with a scorer
+# stronger than mean logprob (value head).
+VALUE_MARGIN = float(_os.environ.get('AUTOTREE_VALUE_MARGIN', '0.8'))
+VALUE_MIN_KEEP = int(_os.environ.get('AUTOTREE_VALUE_MIN_KEEP', '2'))
+
+
+def _validate_branch_count(params: Dict[str, Any]) -> int:
+    branches = int(params.get('branches', 1) or 1)
+    if branches > MAX_BRANCHES:
+        raise ValueError(
+            f'tree branches={branches} exceeds configured maximum='
+            f'{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)'
+        )
+    return branches
 
 
 class TokenizedTreeGenerateReqInput:
@@ -31,6 +65,8 @@ class TokenizedTreeGenerateReqInput:
     _OWN = ("base", "tree")
 
     def __init__(self, base: Any, tree: Dict[str, Any]) -> None:
+        params = dict(tree)
+        _validate_branch_count(params)
         object.__setattr__(self, "base", base)
         object.__setattr__(self, "tree", dict(tree))
 
@@ -116,8 +152,9 @@ class SchedulerTreeRuntime:
 
     def handle_tree_request(self, recv: TokenizedTreeGenerateReqInput):
         """Dispatcher target: route the parent through normal intake."""
+        params = dict(recv.tree)
+        _validate_branch_count(params)
         try:
-            params = dict(recv.tree)
             run = _TreeRun(recv.rid, params)
             branch_count = max(1, int(params.get("branches", 1) or 1))
             delayed_fork = params.get("fork_at_text") is not None and branch_count > 1
@@ -222,6 +259,14 @@ class SchedulerTreeRuntime:
         )
 
     # -- internals ---------------------------------------------------------
+
+    def _cleanup_run(self, run: _TreeRun, reason: str) -> None:
+        if not run.finalized:
+            self._finalize(run, reason=reason)
+        self.runs.pop(run.parent_rid, None)
+        self.branch_index.pop(run.parent_rid, None)
+        for branch in run.branches.values():
+            self.branch_index.pop(branch.rid, None)
 
     @staticmethod
     def _uses_delayed_fork(run: _TreeRun) -> bool:
@@ -680,6 +725,14 @@ def get_active() -> Optional[SchedulerTreeRuntime]:
     runtime = _ACTIVE
     if runtime is None:
         return None
+    for run in list(runtime.runs.values()):
+        parent = run.branches.get("0")
+        if (
+            parent is not None
+            and parent.req is not None
+            and parent.req.finished()
+        ):
+            runtime._cleanup_run(run, reason="parent_left")
     return runtime if any(not run.finalized for run in runtime.runs.values()) else None
 
 
@@ -688,5 +741,18 @@ def install(scheduler: Any) -> SchedulerTreeRuntime:
     global _ACTIVE
     runtime = SchedulerTreeRuntime(scheduler)
     scheduler.tree_runtime = runtime
+    original_abort = getattr(scheduler, "abort_request", None)
+    if callable(original_abort):
+        def abort_request(recv_req):
+            if recv_req.abort_all:
+                runs = list(runtime.runs.values())
+            else:
+                run = runtime.runs.get(recv_req.rid)
+                runs = [run] if run is not None else []
+            for run in runs:
+                runtime._cleanup_run(run, reason="parent_abort")
+            return original_abort(recv_req)
+
+        scheduler.abort_request = abort_request
     _ACTIVE = runtime
     return runtime
