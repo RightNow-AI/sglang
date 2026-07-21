@@ -625,16 +625,18 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         tree = getattr(obj, "tree", None)
         base = getattr(obj, "base", None)
         if tree is not None and base is not None:
-            params = (
-                tree
-                if isinstance(tree, dict)
-                else {
+            if isinstance(tree, dict):
+                params = tree
+            elif hasattr(tree, "to_runtime_dict"):
+                params = tree.to_runtime_dict()
+            else:
+                params = {
                     "policy": getattr(tree, "policy", "beam"),
                     "branches": getattr(tree, "branches", 1),
                     "budget_tokens": getattr(tree, "budget_tokens", 0),
                     "scorer": getattr(tree, "scorer", None),
+                    "fork_at_text": getattr(tree, "fork_at_text", None),
                 }
-            )
             setattr(base, "_autotree_params", params)
             return base
         return obj
