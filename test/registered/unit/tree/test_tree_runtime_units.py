@@ -1,10 +1,13 @@
 import importlib.util
+import pickle
 import sys
 import types
 from array import array
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from sglang.srt.tree import tree_runtime
 from sglang.test.ci.ci_register import register_cpu_ci
@@ -48,6 +51,12 @@ def install_fake_finish_reason(monkeypatch):
     monkeypatch.setitem(sys.modules, module.__name__, module)
 
 
+def track_run(runtime, run):
+    runtime.runs[run.parent_rid] = run
+    for branch in run.branches.values():
+        runtime.branch_index[branch.rid] = run
+
+
 def test_branch_state_mean_logprob_handles_empty_and_scored_branches():
     branch = make_branch(0)
     assert branch.mean_logprob() == 0.0
@@ -85,6 +94,86 @@ def test_get_active_only_exposes_runtime_during_unfinished_tree_run(monkeypatch)
 
     run.finalized = True
     assert tree_runtime.get_active() is None
+
+
+def test_non_tree_get_active_hook_is_byte_identical(monkeypatch):
+    monkeypatch.setattr(tree_runtime, '_ACTIVE', None)
+    runtime = tree_runtime.install(SimpleNamespace())
+    plain_req = FakeReq([1, 2, 3])
+    before = pickle.dumps(plain_req, protocol=pickle.HIGHEST_PROTOCOL)
+
+    active = tree_runtime.get_active()
+    if active is not None:
+        active.on_token(plain_req, [4], -0.25)
+
+    assert pickle.dumps(plain_req, protocol=pickle.HIGHEST_PROTOCOL) == before
+    assert runtime.runs == {}
+    assert runtime.branch_index == {}
+
+
+def test_parent_abort_cleanup_finalizes_children_and_forgets_run(monkeypatch):
+    install_fake_finish_reason(monkeypatch)
+    monkeypatch.setattr(tree_runtime, '_ACTIVE', None)
+    original_abort = Mock(return_value='aborted')
+    scheduler = SimpleNamespace(abort_request=original_abort)
+    runtime = tree_runtime.install(scheduler)
+    run = tree_runtime._TreeRun('parent', {'budget_tokens': 1000})
+    run.branches = {
+        '0': make_branch(0, req=FakeReq([10])),
+        '1': make_branch(1, req=FakeReq([20])),
+        '2': make_branch(2, req=FakeReq([30])),
+    }
+    track_run(runtime, run)
+    abort = SimpleNamespace(rid='parent', abort_all=False)
+
+    assert scheduler.abort_request(abort) == 'aborted'
+
+    original_abort.assert_called_once_with(abort)
+    assert run.finalized is True
+    assert all(
+        branch.req.to_finish == ('length', len(branch.req.output_ids))
+        for branch in run.branches.values()
+    )
+    assert runtime.runs == {}
+    assert runtime.branch_index == {}
+
+
+def test_parent_leave_cleans_never_finalized_run(monkeypatch):
+    install_fake_finish_reason(monkeypatch)
+    monkeypatch.setattr(tree_runtime, '_ACTIVE', None)
+    runtime = tree_runtime.install(SimpleNamespace())
+    run = tree_runtime._TreeRun('parent', {'budget_tokens': 0})
+    run.branches = {
+        '0': make_branch(0, req=FakeReq([10], finished=True)),
+        '1': make_branch(1, req=FakeReq([20], finished=False)),
+        '2': make_branch(2, req=FakeReq([30], finished=False)),
+    }
+    track_run(runtime, run)
+
+    assert tree_runtime.get_active() is None
+
+    assert run.finalized is True
+    assert run.branches['1'].req.to_finish == ('length', 1)
+    assert run.branches['2'].req.to_finish == ('length', 1)
+    assert runtime.runs == {}
+    assert runtime.branch_index == {}
+
+
+def test_tree_branch_cap_rejects_above_limit_and_accepts_at_or_under(
+    monkeypatch,
+):
+    monkeypatch.setattr(tree_runtime, 'MAX_BRANCHES', 2, raising=False)
+    base = SimpleNamespace(rid='parent')
+
+    for branches in (1, 2):
+        wrapped = tree_runtime.TokenizedTreeGenerateReqInput(
+            base, {'branches': branches}
+        )
+        assert wrapped.base is base
+        assert wrapped.tree['branches'] == branches
+
+    with pytest.raises(ValueError, match=r'branches=3.*maximum=2'):
+        tree_runtime.TokenizedTreeGenerateReqInput(base, {'branches': 3})
 
 
 def test_value_prune_honors_margin_and_min_keep(monkeypatch):
@@ -253,6 +342,8 @@ def test_environment_knobs_override_defaults(monkeypatch):
     monkeypatch.setenv("AUTOTREE_VALUE_MARGIN", "1.25")
     monkeypatch.setenv("AUTOTREE_VALUE_MIN_KEEP", "3")
 
+    monkeypatch.setenv('AUTOTREE_MAX_BRANCHES', '7')
+
     spec = importlib.util.spec_from_file_location("tree_runtime_env_test", runtime_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -262,4 +353,5 @@ def test_environment_knobs_override_defaults(monkeypatch):
         module.VALUE_WARMUP_TOKENS,
         module.VALUE_MARGIN,
         module.VALUE_MIN_KEEP,
-    ] == [5, 6, 1.25, 3]
+        module.MAX_BRANCHES,
+    ] == [5, 6, 1.25, 3, 7]
