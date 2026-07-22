@@ -10,6 +10,9 @@ Each backend supports two operators: extend (i.e. prefill with cached prefix) an
 """
 
 import logging
+# Tree shared-prefix decode uses variable group shapes and assumes CUDA graph is
+# disabled for those batches.
+
 import os
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -1416,6 +1419,11 @@ class FlashInferAttnBackend(AttentionBackend):
         forward_batch: ForwardBatch,
         save_kv_cache=True,
     ):
+        if forward_batch.shared_prefix_groups:
+            return self._forward_decode_shared_prefix(
+                q, k, v, layer, forward_batch, save_kv_cache
+            )
+
         decode_wrapper = self.forward_metadata.decode_wrappers[
             self._get_wrapper_idx(layer)
         ]
@@ -1464,6 +1472,273 @@ class FlashInferAttnBackend(AttentionBackend):
         )
 
         return o.view(-1, layer.tp_q_head_num * layer.head_dim)
+
+    def _forward_decode_shared_prefix(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        layer: RadixAttention,
+        forward_batch: ForwardBatch,
+        save_kv_cache: bool,
+    ):
+        if layer.is_cross_attention or layer.sliding_window_size != -1:
+            raise NotImplementedError(
+                'Tree shared-prefix decode currently requires full self-attention.'
+            )
+
+        cache_loc = forward_batch.out_cache_loc
+        if k is not None:
+            assert v is not None
+            if save_kv_cache:
+                self.token_to_kv_pool.set_kv_buffer(
+                    layer,
+                    KVWriteLoc(cache_loc, self.forward_metadata.swa_out_cache_loc),
+                    k,
+                    v,
+                    *self._kv_write_scales(layer),
+                )
+
+        if self.decode_uses_dequant_workspace:
+            kv_cache = (
+                self.token_to_kv_pool.get_flashinfer_decode_dequant_workspace_kv_buffer(
+                    layer,
+                    self.req_to_token_pool.req_to_token,
+                    forward_batch.req_pool_indices,
+                    (
+                        forward_batch.seq_lens_cpu
+                        if forward_batch.seq_lens_cpu is not None
+                        else forward_batch.seq_lens
+                    ),
+                )
+            )
+        else:
+            kv_cache = self.token_to_kv_pool.get_kv_buffer(layer.layer_id)
+
+        q = q.contiguous().view(-1, layer.tp_q_head_num, layer.head_dim)
+        batch_size = q.shape[0]
+        if forward_batch.rids is None or len(forward_batch.rids) != batch_size:
+            raise ValueError(
+                'Tree shared-prefix decode requires one ForwardBatch.rids entry '
+                'per decode query.'
+            )
+        if len(set(forward_batch.rids)) != batch_size:
+            raise ValueError('Tree shared-prefix decode requires unique batch RIDs.')
+
+        seq_lens_source = (
+            forward_batch.seq_lens_cpu
+            if forward_batch.seq_lens_cpu is not None
+            else forward_batch.seq_lens
+        )
+        if isinstance(seq_lens_source, torch.Tensor):
+            seq_lens_host = [
+                int(seq_len) for seq_len in seq_lens_source[:batch_size].cpu().tolist()
+            ]
+        else:
+            seq_lens_host = [
+                int(seq_len) for seq_len in seq_lens_source[:batch_size]
+            ]
+        if len(seq_lens_host) != batch_size:
+            raise ValueError(
+                'Tree shared-prefix decode requires one sequence length per query.'
+            )
+
+        rid_to_row = {rid: row for row, rid in enumerate(forward_batch.rids)}
+        claimed_rows = set()
+        active_groups = []
+        suffix_starts = [0] * batch_size
+        for group in forward_batch.shared_prefix_groups:
+            rows = list(
+                dict.fromkeys(
+                    rid_to_row[rid] for rid in group.rids if rid in rid_to_row
+                )
+            )
+            if not rows:
+                continue
+
+            overlap = claimed_rows.intersection(rows)
+            if overlap:
+                if set(rows).issubset(claimed_rows):
+                    continue
+                raise ValueError(
+                    'Tree shared-prefix groups overlap on only part of a group.'
+                )
+
+            shared_len = int(group.shared_len)
+            if shared_len <= 0:
+                raise ValueError(
+                    'Tree shared-prefix decode requires a positive shared_len.'
+                )
+            for row in rows:
+                if seq_lens_host[row] <= shared_len:
+                    raise ValueError(
+                        'Tree shared-prefix decode requires each branch to have '
+                        'at least one suffix token.'
+                    )
+                suffix_starts[row] = shared_len
+            claimed_rows.update(rows)
+            active_groups.append((rows, shared_len))
+
+        if not active_groups:
+            raise ValueError(
+                'Tree shared-prefix metadata did not match any active batch RID.'
+            )
+
+        device = q.device
+        req_pool_indices = forward_batch.req_pool_indices[:batch_size]
+        grouped_rows = []
+        canonical_rows = []
+        shared_lens = []
+        shared_qo_indptr_host = [0]
+        shared_kv_indptr_host = [0]
+        for rows, shared_len in active_groups:
+            grouped_rows.extend(rows)
+            canonical_rows.append(rows[0])
+            shared_lens.append(shared_len)
+            shared_qo_indptr_host.append(
+                shared_qo_indptr_host[-1] + len(rows)
+            )
+            shared_kv_indptr_host.append(
+                shared_kv_indptr_host[-1] + shared_len
+            )
+
+        grouped_rows_tensor = torch.tensor(
+            grouped_rows, dtype=torch.long, device=device
+        )
+        canonical_rows_tensor = torch.tensor(
+            canonical_rows, dtype=torch.long, device=device
+        )
+        shared_lens_tensor = torch.tensor(
+            shared_lens, dtype=torch.int32, device=device
+        )
+        shared_qo_indptr = torch.tensor(
+            shared_qo_indptr_host, dtype=torch.int32, device=device
+        )
+        shared_kv_indptr = torch.tensor(
+            shared_kv_indptr_host, dtype=torch.int32, device=device
+        )
+        shared_kv_indices = torch.empty(
+            shared_kv_indptr_host[-1], dtype=torch.int32, device=device
+        )
+        shared_req_pool_indices = req_pool_indices.index_select(
+            0, canonical_rows_tensor
+        )
+        create_flashinfer_kv_indices_triton[(len(active_groups),)](
+            self.req_to_token_pool.req_to_token,
+            shared_req_pool_indices,
+            shared_lens_tensor,
+            shared_kv_indptr,
+            torch.zeros_like(shared_lens_tensor),
+            shared_kv_indices,
+            self.req_to_token_pool.req_to_token.shape[1],
+        )
+
+        suffix_lens_host = [
+            seq_len - suffix_start
+            for seq_len, suffix_start in zip(seq_lens_host, suffix_starts)
+        ]
+        if any(suffix_len <= 0 for suffix_len in suffix_lens_host):
+            raise ValueError(
+                'Tree shared-prefix decode requires positive KV length per row.'
+            )
+        suffix_lens = torch.tensor(
+            suffix_lens_host, dtype=torch.int32, device=device
+        )
+        suffix_starts_tensor = torch.tensor(
+            suffix_starts, dtype=torch.int32, device=device
+        )
+        suffix_qo_indptr = torch.arange(
+            batch_size + 1, dtype=torch.int32, device=device
+        )
+        suffix_kv_indptr = torch.zeros(
+            batch_size + 1, dtype=torch.int32, device=device
+        )
+        suffix_kv_indptr[1:] = torch.cumsum(suffix_lens, dim=0)
+        suffix_kv_indices = torch.empty(
+            sum(suffix_lens_host), dtype=torch.int32, device=device
+        )
+        create_flashinfer_kv_indices_triton[(batch_size,)](
+            self.req_to_token_pool.req_to_token,
+            req_pool_indices,
+            suffix_lens,
+            suffix_kv_indptr,
+            suffix_starts_tensor,
+            suffix_kv_indices,
+            self.req_to_token_pool.req_to_token.shape[1],
+        )
+
+        tree_wrappers = getattr(self, '_tree_decode_prefill_wrappers', None)
+        if tree_wrappers is None:
+            tree_wrappers = (
+                BatchPrefillWithPagedKVCacheWrapper(
+                    self.workspace_buffer,
+                    'NHD',
+                    backend=self.prefill_backend,
+                ),
+                BatchPrefillWithPagedKVCacheWrapper(
+                    self.workspace_buffer,
+                    'NHD',
+                    backend=self.prefill_backend,
+                ),
+            )
+            self._tree_decode_prefill_wrappers = tree_wrappers
+        shared_wrapper, suffix_wrapper = tree_wrappers
+
+        shared_wrapper.begin_forward(
+            shared_qo_indptr,
+            shared_kv_indptr,
+            shared_kv_indices,
+            torch.ones(len(active_groups), dtype=torch.int32, device=device),
+            layer.tp_q_head_num,
+            layer.tp_k_head_num,
+            layer.head_dim,
+            1,
+            q_data_type=q.dtype,
+            kv_data_type=self.flashinfer_kv_cache_dtype,
+            non_blocking=True,
+            fixed_split_size=self.prefill_split_tile_size,
+        )
+        suffix_wrapper.begin_forward(
+            suffix_qo_indptr,
+            suffix_kv_indptr,
+            suffix_kv_indices,
+            torch.ones(batch_size, dtype=torch.int32, device=device),
+            layer.tp_q_head_num,
+            layer.tp_k_head_num,
+            layer.head_dim,
+            1,
+            q_data_type=q.dtype,
+            kv_data_type=self.flashinfer_kv_cache_dtype,
+            non_blocking=True,
+            fixed_split_size=self.prefill_split_tile_size,
+        )
+
+        o_shared, s_shared = shared_wrapper.forward_return_lse(
+            q.index_select(0, grouped_rows_tensor),
+            kv_cache,
+            causal=False,
+            sm_scale=layer.scaling,
+            logits_soft_cap=layer.logit_cap,
+            k_scale=layer.k_scale_float,
+            v_scale=layer.v_scale_float,
+        )
+        o_suffix, s_suffix = suffix_wrapper.forward_return_lse(
+            q,
+            kv_cache,
+            causal=False,
+            sm_scale=layer.scaling,
+            logits_soft_cap=layer.logit_cap,
+            k_scale=layer.k_scale_float,
+            v_scale=layer.v_scale_float,
+        )
+        o_grouped, _ = _safe_merge_state(
+            o_shared,
+            s_shared,
+            o_suffix.index_select(0, grouped_rows_tensor),
+            s_suffix.index_select(0, grouped_rows_tensor),
+        )
+        o_suffix.index_copy_(0, grouped_rows_tensor, o_grouped)
+        return o_suffix.view(-1, layer.tp_q_head_num * layer.head_dim)
 
     def _get_wrapper_idx(self, layer: RadixAttention):
         if self.num_wrappers == 1:
