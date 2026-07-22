@@ -1529,6 +1529,24 @@ class FlashInferAttnBackend(AttentionBackend):
             kv_cache = self.token_to_kv_pool.get_kv_buffer(layer.layer_id)
 
         q = q.contiguous().view(-1, layer.tp_q_head_num, layer.head_dim)
+
+        # Fast path: the descriptor set (group resolution, index tensors, and
+        # the wrapper plan) depends only on forward_batch, not on the layer.
+        # Layer 0 builds it below and stashes the one tensor the attention
+        # tail needs; the remaining layers skip the entire host-side build.
+        # A new decode step gets a fresh ForwardBatch, so the cache resets.
+        _sr_rows_cached = getattr(forward_batch, "_autotree_sr_rows", None)
+        if _sr_rows_cached is not None:
+            shared_wrapper, suffix_wrapper = self._tree_decode_prefill_wrappers
+            return self._tree_shared_read_attend(
+                q,
+                _sr_rows_cached,
+                shared_wrapper,
+                suffix_wrapper,
+                kv_cache,
+                layer,
+            )
+
         batch_size = q.shape[0]
         if forward_batch.rids is None or len(forward_batch.rids) != batch_size:
             raise ValueError(
@@ -1735,6 +1753,29 @@ class FlashInferAttnBackend(AttentionBackend):
             )
             forward_batch._autotree_sr_planned = True
 
+        forward_batch._autotree_sr_rows = grouped_rows_tensor
+        return self._tree_shared_read_attend(
+            q,
+            grouped_rows_tensor,
+            shared_wrapper,
+            suffix_wrapper,
+            kv_cache,
+            layer,
+        )
+
+    def _tree_shared_read_attend(
+        self,
+        q: torch.Tensor,
+        grouped_rows_tensor: torch.Tensor,
+        shared_wrapper,
+        suffix_wrapper,
+        kv_cache,
+        layer: RadixAttention,
+    ):
+        """Per-layer attention tail of the shared-read decode path: one pass
+        over the shared prefix (queries gathered to grouped rows), one pass
+        over each row's suffix, merged by log-sum-exp state. All descriptor
+        and plan work happened once per batch before this is called."""
         o_shared, s_shared = shared_wrapper.forward_return_lse(
             q.index_select(0, grouped_rows_tensor),
             kv_cache,
