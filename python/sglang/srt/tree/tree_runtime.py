@@ -438,6 +438,12 @@ class SchedulerTreeRuntime:
                 # children keep the caller's sampling; only the parent is held
                 try:
                     child_sp.max_new_tokens, child_sp.ignore_eos = run.orig_sampling
+                    # Benchmark mode: force every branch to run to max_new_tokens
+                    # (ignore_eos) so all B branches generate an identical, fixed
+                    # token count. This makes ms/token comparisons apples-to-apples
+                    # by removing natural-EOS / siblings-done early termination.
+                    if _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") == "1":
+                        child_sp.ignore_eos = True
                 except Exception:
                     pass
             seed = getattr(child_sp, "seed", None)
@@ -521,11 +527,16 @@ class SchedulerTreeRuntime:
         if run.spent - run.last_value_check >= VALUE_CHECK_INTERVAL:
             run.last_value_check = run.spent
             self._maybe_value_prune(run)
-            self._maybe_majority_lock(run)
+            if _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") != "1":
+                self._maybe_majority_lock(run)
 
         if state.branch_id == 0:
             self._attach_snapshot(run)
-            if not run.finalized and len(run.branches) > 1:
+            if (
+                not run.finalized
+                and len(run.branches) > 1
+                and _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") != "1"
+            ):
                 siblings = [
                     b for b in run.branches.values() if b.branch_id != 0
                 ]
