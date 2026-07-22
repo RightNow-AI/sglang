@@ -750,7 +750,16 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
         # batches so the single-read shared-prefix attention path can engage.
         # Guarded and defensive - no tree runtime, not decode, or any error
         # leaves shared_prefix_groups None and the stock decode path unchanged.
-        if ret.forward_mode.is_decode() and ret.rids:
+        # AUTOTREE_SHARED_READ=0 forces the stock decode path even for tree
+        # batches; this is the on/off switch used for byte-identical parity
+        # verification against stock attention.
+        import os as _autotree_os
+
+        if (
+            ret.forward_mode.is_decode()
+            and ret.rids
+            and _autotree_os.environ.get("AUTOTREE_SHARED_READ", "1") != "0"
+        ):
             try:
                 from sglang.srt.tree.tree_runtime import get_active as _autotree_get_active
 
