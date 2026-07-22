@@ -1487,6 +1487,19 @@ class FlashInferAttnBackend(AttentionBackend):
                 'Tree shared-prefix decode currently requires full self-attention.'
             )
 
+        # Verification marker: proves the shared-read path actually executed
+        # (guarded by an env so it is silent in normal operation).
+        import os as _sr_os
+
+        if _sr_os.environ.get("AUTOTREE_SHARED_READ_TRACE") == "1":
+            _sr_n = len(forward_batch.shared_prefix_groups or ())
+            logger.info(
+                "[shared-read] forward_decode single-read path fired: "
+                "layer=%s groups=%d",
+                getattr(layer, "layer_id", "?"),
+                _sr_n,
+            )
+
         cache_loc = forward_batch.out_cache_loc
         if k is not None:
             assert v is not None
