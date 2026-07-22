@@ -4,6 +4,26 @@ This standalone harness compares AutoTree with the strongest practical n=B
 baseline on the workload AutoTree is meant to improve: a long shared retrieved
 prefix, one generated plan, B candidate branches, and a final vote.
 
+## Models: use large models for headline numbers
+
+Headline benchmarks MUST run on production-grade large models, not small dev
+models. The shared-read advantage grows with model size: KV bytes per token
+scale with the model, so at 70B a 100k prefix is roughly 4x the KV of 8B, and
+the per-branch read wall dominates decode far more decisively. Small models
+understate our own result because weights dilute the KV cost.
+
+- **Headline (required):** 70B-class - Llama-3.3-70B, Qwen3-32B, and
+  DeepSeek-R1-Distill-70B (single node, 8xH100 or TP=4).
+- **Flagship (the money shot):** Inkling-Small 276B and Inkling 975B on
+  B200/NVFP4, where the KV wall is largest.
+- **Comparability / CI only:** an 8B (e.g. Llama-3.1-8B) may be reported as a
+  smaller-scale reference point, clearly labeled as such - never as the
+  headline.
+- **Do NOT** use sub-8B models (0.5B/1.5B/7B) for any published number; those
+  are development smoke tests only.
+
+Always pass `--model` a large model id and report it in every result row.
+
 ## Arms
 
 - **autotree_tree:** one POST /v1/tree/completions request with
