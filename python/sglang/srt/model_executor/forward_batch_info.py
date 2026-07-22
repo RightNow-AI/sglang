@@ -746,6 +746,28 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
 
         device = model_runner.device
 
+        # AutoTree: populate the shared-prefix group descriptor for decode
+        # batches so the single-read shared-prefix attention path can engage.
+        # Guarded and defensive - no tree runtime, not decode, or any error
+        # leaves shared_prefix_groups None and the stock decode path unchanged.
+        if ret.forward_mode.is_decode() and ret.rids:
+            try:
+                from sglang.srt.tree.tree_runtime import get_active as _autotree_get_active
+
+                _autotree_runtime = _autotree_get_active()
+                if _autotree_runtime is not None:
+                    _autotree_groups = {}
+                    for _autotree_rid in ret.rids:
+                        _autotree_group = _autotree_runtime.get_shared_prefix_group(
+                            _autotree_rid
+                        )
+                        if _autotree_group is not None:
+                            _autotree_groups[id(_autotree_group)] = _autotree_group
+                    if _autotree_groups:
+                        ret.shared_prefix_groups = list(_autotree_groups.values())
+            except Exception:
+                ret.shared_prefix_groups = None
+
         if envs.SGLANG_KV_CANARY_ENABLE_TOKEN_ORACLE.get():
             hashed = _hash_rids_to_tensor(
                 rids=[req.rid for req in batch.reqs],
