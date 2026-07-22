@@ -1697,34 +1697,43 @@ class FlashInferAttnBackend(AttentionBackend):
             self._tree_decode_prefill_wrappers = tree_wrappers
         shared_wrapper, suffix_wrapper = tree_wrappers
 
-        shared_wrapper.begin_forward(
-            shared_qo_indptr,
-            shared_kv_indptr,
-            shared_kv_indices,
-            torch.ones(len(active_groups), dtype=torch.int32, device=device),
-            layer.tp_q_head_num,
-            layer.tp_k_head_num,
-            layer.head_dim,
-            1,
-            q_data_type=q.dtype,
-            kv_data_type=self.flashinfer_kv_cache_dtype,
-            non_blocking=True,
-            fixed_split_size=self.prefill_split_tile_size,
-        )
-        suffix_wrapper.begin_forward(
-            suffix_qo_indptr,
-            suffix_kv_indptr,
-            suffix_kv_indices,
-            torch.ones(batch_size, dtype=torch.int32, device=device),
-            layer.tp_q_head_num,
-            layer.tp_k_head_num,
-            layer.head_dim,
-            1,
-            q_data_type=q.dtype,
-            kv_data_type=self.flashinfer_kv_cache_dtype,
-            non_blocking=True,
-            fixed_split_size=self.prefill_split_tile_size,
-        )
+        # Plan the shared/suffix wrappers ONCE per decode batch. The index
+        # structure depends only on forward_batch (rids, seq_lens, groups) and
+        # is identical across all layers of a decode step, so re-planning every
+        # layer is redundant. FlashInfer's plan/run split supports plan-once,
+        # run-many: layer 0 plans, the remaining layers reuse the same plan.
+        # A new decode step gets a fresh ForwardBatch, so the flag resets and
+        # the wrappers are re-planned for it.
+        if not getattr(forward_batch, "_autotree_sr_planned", False):
+            shared_wrapper.begin_forward(
+                shared_qo_indptr,
+                shared_kv_indptr,
+                shared_kv_indices,
+                torch.ones(len(active_groups), dtype=torch.int32, device=device),
+                layer.tp_q_head_num,
+                layer.tp_k_head_num,
+                layer.head_dim,
+                1,
+                q_data_type=q.dtype,
+                kv_data_type=self.flashinfer_kv_cache_dtype,
+                non_blocking=True,
+                fixed_split_size=self.prefill_split_tile_size,
+            )
+            suffix_wrapper.begin_forward(
+                suffix_qo_indptr,
+                suffix_kv_indptr,
+                suffix_kv_indices,
+                torch.ones(batch_size, dtype=torch.int32, device=device),
+                layer.tp_q_head_num,
+                layer.tp_k_head_num,
+                layer.head_dim,
+                1,
+                q_data_type=q.dtype,
+                kv_data_type=self.flashinfer_kv_cache_dtype,
+                non_blocking=True,
+                fixed_split_size=self.prefill_split_tile_size,
+            )
+            forward_batch._autotree_sr_planned = True
 
         o_shared, s_shared = shared_wrapper.forward_return_lse(
             q.index_select(0, grouped_rows_tensor),
