@@ -29,6 +29,8 @@ import os as _os
 import secrets
 from typing import Any, Dict, Optional
 
+from sglang.srt.tree.shared_prefix import SharedPrefixGroup
+
 logger = logging.getLogger(__name__)
 
 # Intake and marginal-value scheduling knobs are environment-overridable so
@@ -120,7 +122,7 @@ class _TreeRun:
         "parent_rid", "params", "branches", "spent", "finalized",
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
         "orig_sampling", "forked", "fork_attempted", "cache_namespace",
-        "fork_cache_supported",
+        "fork_cache_supported", "shared_prefix_group",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -138,6 +140,7 @@ class _TreeRun:
         self.fork_attempted = False
         self.cache_namespace = None
         self.fork_cache_supported = False
+        self.shared_prefix_group: Optional[SharedPrefixGroup] = None
 
 
 class SchedulerTreeRuntime:
@@ -147,6 +150,10 @@ class SchedulerTreeRuntime:
         self.scheduler = scheduler
         self.runs: Dict[str, _TreeRun] = {}          # parent rid -> run
         self.branch_index: Dict[str, _TreeRun] = {}  # any member rid -> run
+
+    def get_shared_prefix_group(self, rid: str) -> Optional[SharedPrefixGroup]:
+        run = self.branch_index.get(rid)
+        return run.shared_prefix_group if run is not None else None
 
     # -- intake ------------------------------------------------------------
 
@@ -450,6 +457,25 @@ class SchedulerTreeRuntime:
             run.branches[str(b)] = branch
             self.branch_index[child_rid] = run
         run.forked = n > 1
+        if run.forked:
+            try:
+                shared_input_ids = (
+                    child_input_ids
+                    if child_input_ids is not None
+                    else parent_req.origin_input_ids
+                )
+                branches = sorted(
+                    run.branches.values(), key=lambda branch: branch.branch_id
+                )
+                run.shared_prefix_group = SharedPrefixGroup(
+                    rids=[branch.rid for branch in branches],
+                    shared_len=len(shared_input_ids),
+                    branch_ids=[branch.branch_id for branch in branches],
+                )
+            except Exception:
+                logger.exception(
+                    "[tree] %s shared-prefix tagging failed", run.parent_rid
+                )
         logger.info(
             "[tree] %s forked %d sibling branches via intake path",
             run.parent_rid, n - 1,

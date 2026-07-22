@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner
     from sglang.srt.sampling.sampling_batch_info import SamplingBatchInfo
     from sglang.srt.speculative.spec_info import SpecInput, SpeculativeAlgorithm
+    from sglang.srt.tree.shared_prefix import SharedPrefixGroup
 
 # Warn-once flag for the deprecated skip_attn_backend_init kwarg; see
 # ForwardBatch.apply_deprecated_skip_attn_backend_init.
@@ -452,6 +453,8 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
     lora_ids: Optional[List[str]] = None
     # For dumper: request IDs for cross-step sequence tracking
     rids: Optional[List[str]] = None
+    shared_prefix_groups: Optional[List[SharedPrefixGroup]] = None
+    """Consumed by the tree shared-read decode path."""
 
     # === Per-forward overrides passed explicitly to init_new ===
     capture_hidden_mode: CaptureHiddenMode = None
