@@ -38,9 +38,6 @@ tree, exposed through an OpenAI-compatible endpoint.
   page, and a migrate-from-vLLM guide.
 - **Release hygiene**: NOTICE, PROVENANCE, SECURITY, REPRODUCE.
 - **CI**: tree CPU test workflow (`.github/workflows/tree-tests.yml`).
-- **Kernel groundwork**: shared-read decomposition proof
-  (`test_shared_read_decomposition.py`) and the integration map
-  (`docs/kernel/shared-read-integration.md`) for the v0.3 single-read kernel.
 
 ### Verified
 - 42 CPU unit tests for the tree runtime and serving.
@@ -51,11 +48,5 @@ tree, exposed through an OpenAI-compatible endpoint.
 ### Honest notes
 - On i.i.d. best-of-n, AutoTree is at parity with vLLM (`n>1` already shares
   prompt KV). The measured edge is the mid-generation-fork capability and
-  long-context branching; the order-of-magnitude win depends on the v0.3
-  single-read kernel. No accuracy-headline claim: GSM8K tree-vs-single is within
-  noise. Every benchmark carries its regime; numbers live with raw logs.
-
-### Not in this release
-- The single-read tree-attention kernel (v0.3): foundations proven (correctness,
-  integration surface, KV-read-bound regime), integration in progress.
-- verl end-to-end RL throughput demo (v0.4).
+  long-context branching. No accuracy-headline claim: GSM8K tree-vs-single is
+  within noise. Every benchmark carries its regime; numbers live with raw logs.
