@@ -22,6 +22,7 @@ class TreeParams:
     budget_tokens: int = 1024
     scorer: Optional[str] = None
     fork_at_text: Optional[str] = None
+    fork_at_entropy: Optional[float] = None
 
     def validate(self) -> None:
         if self.policy not in TREE_POLICIES:
@@ -35,6 +36,17 @@ class TreeParams:
                 raise ValueError("fork_at_text must be a non-empty string")
             if len(self.fork_at_text) > 64:
                 raise ValueError("fork_at_text must be at most 64 characters")
+        if self.fork_at_entropy is not None:
+            if not isinstance(self.fork_at_entropy, (int, float)) or isinstance(
+                self.fork_at_entropy, bool
+            ):
+                raise ValueError("fork_at_entropy must be greater than 0")
+            if not self.fork_at_entropy > 0:
+                raise ValueError("fork_at_entropy must be greater than 0")
+        if self.fork_at_text is not None and self.fork_at_entropy is not None:
+            raise ValueError(
+                "fork_at_text and fork_at_entropy are mutually exclusive"
+            )
 
     def to_runtime_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

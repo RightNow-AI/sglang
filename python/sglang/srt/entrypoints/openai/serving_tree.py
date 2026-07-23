@@ -94,6 +94,7 @@ class OpenAIServingTree(OpenAIServingBase):
                 budget_tokens=request.tree.budget_tokens,
                 scorer=request.tree.scorer,
                 fork_at_text=request.tree.fork_at_text,
+                fork_at_entropy=request.tree.fork_at_entropy,
             ),
         )
         tree_request.tree.validate()

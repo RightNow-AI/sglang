@@ -28,6 +28,15 @@ class TreeParameters(BaseModel):
     budget_tokens: int = Field(ge=1, le=1_000_000)
     scorer: Optional[str] = None
     fork_at_text: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    fork_at_entropy: Optional[float] = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_fork_trigger(self) -> "TreeParameters":
+        if self.fork_at_text is not None and self.fork_at_entropy is not None:
+            raise ValueError(
+                "fork_at_text and fork_at_entropy are mutually exclusive"
+            )
+        return self
 
 
 class TreeStreamOptions(BaseModel):

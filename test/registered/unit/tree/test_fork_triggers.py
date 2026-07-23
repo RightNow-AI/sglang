@@ -107,7 +107,16 @@ class FakeReq:
         self.kv_committed_len = len(self.origin_input_ids) + len(self.output_ids) - 1
 
 
-def start_runtime(*, fork_at_text, branches=3, cache=None, pieces=None, rid="parent"):
+def start_runtime(
+    *,
+    fork_at_text=None,
+    fork_at_entropy=None,
+    branches=3,
+    budget_tokens=100,
+    cache=None,
+    pieces=None,
+    rid="parent",
+):
     cache = cache or RecordingCache()
     scheduler = FakeScheduler(PieceTokenizer(pieces or {}), cache)
     runtime = SchedulerTreeRuntime(scheduler)
@@ -123,9 +132,10 @@ def start_runtime(*, fork_at_text, branches=3, cache=None, pieces=None, rid="par
         {
             "policy": "beam",
             "branches": branches,
-            "budget_tokens": 100,
+            "budget_tokens": budget_tokens,
             "scorer": None,
             "fork_at_text": fork_at_text,
+            "fork_at_entropy": fork_at_entropy,
         },
     )
     runtime.handle_tree_request(envelope)
@@ -144,6 +154,107 @@ def test_protocol_validates_optional_fork_delimiter_and_runtime_dict():
     params = TreeParams(branches=2, budget_tokens=32, fork_at_text="</plan>")
     params.validate()
     assert params.to_runtime_dict()["fork_at_text"] == "</plan>"
+
+
+def test_tree_params_validates_entropy_threshold_and_mutual_exclusion():
+    base = {"policy": "beam", "branches": 2, "budget_tokens": 32}
+
+    wire = TreeParameters(**base, fork_at_entropy=0.75)
+    assert wire.fork_at_entropy == 0.75
+    for invalid in (0, -0.1):
+        with pytest.raises(ValidationError):
+            TreeParameters(**base, fork_at_entropy=invalid)
+    with pytest.raises(ValidationError, match="mutually exclusive"):
+        TreeParameters(
+            **base,
+            fork_at_text="</plan>",
+            fork_at_entropy=0.75,
+        )
+
+    params = TreeParams(branches=2, budget_tokens=32, fork_at_entropy=0.75)
+    params.validate()
+    assert params.to_runtime_dict()["fork_at_entropy"] == 0.75
+    for invalid in (0, -0.1, True, "0.75"):
+        with pytest.raises(ValueError, match="greater than 0"):
+            TreeParams(fork_at_entropy=invalid).validate()
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        TreeParams(
+            fork_at_text="</plan>",
+            fork_at_entropy=0.75,
+        ).validate()
+
+
+def test_entropy_window_forks_only_after_mean_negative_logprob_crosses_threshold():
+    runtime, scheduler, _ = start_runtime(fork_at_entropy=1.0)
+    parent = FakeReq(scheduler.requests[0], first_output=[1])
+
+    runtime.on_prefill_done(parent)
+    for token_id in range(2, 10):
+        parent.append_decode_token(token_id)
+        runtime.on_token(parent, [token_id], -0.5)
+
+    run = runtime.runs[parent.rid]
+    assert len(run.entropy_logprobs) == 8
+    assert -sum(run.entropy_logprobs) / len(run.entropy_logprobs) == 0.5
+    assert len(scheduler.requests) == 1
+    assert run.forked is False
+
+    parent.append_decode_token(10)
+    runtime.on_token(parent, [10], -5.0)
+
+    assert len(scheduler.requests) == 3
+    assert run.forked is True
+
+
+def test_entropy_fork_starvation_fallback_fires_at_token_cap():
+    runtime, scheduler, _ = start_runtime(
+        fork_at_entropy=100.0,
+        branches=4,
+        budget_tokens=1024,
+    )
+    parent = FakeReq(scheduler.requests[0], first_output=[1])
+
+    runtime.on_prefill_done(parent)
+    run = runtime.runs[parent.rid]
+    assert runtime._entropy_fork_starvation_cap(run) == 64
+    for token_id in range(2, 64):
+        parent.append_decode_token(token_id)
+        runtime.on_token(parent, [token_id], -0.1)
+
+    assert len(parent.output_ids) == 63
+    assert len(scheduler.requests) == 1
+    assert run.forked is False
+
+    parent.append_decode_token(64)
+    runtime.on_token(parent, [64], -0.1)
+
+    assert len(scheduler.requests) == 4
+    assert run.forked is True
+
+
+def test_entropy_fork_tags_prompt_and_parent_prefix_for_all_branches():
+    runtime, scheduler, _ = start_runtime(
+        fork_at_entropy=0.75,
+        branches=4,
+    )
+    parent = FakeReq(scheduler.requests[0], first_output=[1])
+
+    runtime.on_prefill_done(parent)
+    for token_id in range(2, 10):
+        parent.append_decode_token(token_id)
+        runtime.on_token(parent, [token_id], -1.0)
+
+    run = runtime.runs[parent.rid]
+    group = runtime.get_shared_prefix_group(parent.rid)
+    assert len(run.branches) == 4
+    assert group.rids == [
+        "parent",
+        "parent#tree1",
+        "parent#tree2",
+        "parent#tree3",
+    ]
+    assert group.branch_ids == [0, 1, 2, 3]
+    assert group.shared_len == len(parent.origin_input_ids) + len(parent.output_ids)
 
 
 def test_delimiter_spanning_tokens_forks_with_extended_child_input():

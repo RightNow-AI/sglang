@@ -2,8 +2,9 @@
 
 Parent request doubles as branch 0. By default, sibling branches are spawned
 after prefill as ordinary requests whose prompts radix-share the parent. A
-request may instead wait for a text delimiter and publish the parent's
-generated KV under a fork-local cache namespace before spawning siblings.
+request may instead wait for a text delimiter or chosen-logprob uncertainty
+trigger, then publish the parent's generated KV under a fork-local cache
+namespace before spawning siblings.
 Per-token hooks feed the tree manager; kills reuse the scheduler's abort path;
 the parent remains the wire carrier for the final tree snapshot. All hooks are
 defensive: a tree bug degrades to plain generation, never a scheduler crash.
@@ -27,6 +28,7 @@ import copy
 import logging
 import os as _os
 import secrets
+from collections import deque
 from typing import Any, Dict, Optional
 
 from sglang.srt.tree.shared_prefix import SharedPrefixGroup
@@ -36,6 +38,10 @@ logger = logging.getLogger(__name__)
 # Intake and marginal-value scheduling knobs are environment-overridable so
 # operators can bound tenant fan-out and run policy ablations without edits.
 MAX_BRANCHES = int(_os.environ.get('AUTOTREE_MAX_BRANCHES', '64'))
+ENTROPY_FORK_WINDOW_SIZE = 8
+# Entropy-triggered runs must eventually fork even when the chosen-logprob
+# proxy stays confident. The budget-derived cap may raise this floor.
+ENTROPY_FORK_STARVATION_MIN_TOKENS = 64
 VALUE_CHECK_INTERVAL = int(_os.environ.get('AUTOTREE_VALUE_CHECK_INTERVAL', '16'))
 VALUE_WARMUP_TOKENS = int(_os.environ.get('AUTOTREE_VALUE_WARMUP_TOKENS', '8'))
 # Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
@@ -122,7 +128,8 @@ class _TreeRun:
         "parent_rid", "params", "branches", "spent", "finalized",
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
         "orig_sampling", "forked", "fork_attempted", "cache_namespace",
-        "fork_cache_supported", "shared_prefix_group",
+        "fork_cache_supported", "shared_prefix_group", "entropy_logprobs",
+        "entropy_lp_seen",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -141,6 +148,8 @@ class _TreeRun:
         self.cache_namespace = None
         self.fork_cache_supported = False
         self.shared_prefix_group: Optional[SharedPrefixGroup] = None
+        self.entropy_logprobs = deque(maxlen=ENTROPY_FORK_WINDOW_SIZE)
+        self.entropy_lp_seen = 0
 
 
 class SchedulerTreeRuntime:
@@ -164,7 +173,7 @@ class SchedulerTreeRuntime:
         try:
             run = _TreeRun(recv.rid, params)
             branch_count = max(1, int(params.get("branches", 1) or 1))
-            delayed_fork = params.get("fork_at_text") is not None and branch_count > 1
+            delayed_fork = self._uses_delayed_fork(run)
             if delayed_fork:
                 tree_cache = getattr(self.scheduler, "tree_cache", None)
                 run.fork_cache_supported = self._cache_supports_fork_namespaces(
@@ -224,6 +233,8 @@ class SchedulerTreeRuntime:
         try:
             if self._uses_delayed_fork(run):
                 run.branches["0"] = _BranchState(req.rid, 0, req)
+                if run.params.get("fork_at_entropy") is not None:
+                    self._record_entropy_logprobs(run, req, None)
                 self._maybe_trigger_delayed_fork(run, req)
                 return
             self._fork_branches(run, req)
@@ -242,7 +253,7 @@ class SchedulerTreeRuntime:
             logger.exception("[tree] token hook failed for %s", req.rid)
 
     def on_request_finished(self, req: Any) -> None:
-        """Finish a delimiter-gated request that never reached its trigger."""
+        """Finish a delayed-fork request that never reached its trigger."""
         run = self.branch_index.get(req.rid)
         if (
             run is None
@@ -258,11 +269,13 @@ class SchedulerTreeRuntime:
             run.branches["0"] = parent
         parent.req = req
         parent.state = "finalized"
+        self._restore_parent_sampling(run, req)
         run.finalized = True
         run.winner_branch_id = 0
         self._attach_snapshot(run, include_outputs=True)
         logger.info(
-            "[tree] %s delimiter not found; returning parent only", run.parent_rid
+            "[tree] %s delayed fork not triggered; returning parent only",
+            run.parent_rid,
         )
 
     # -- internals ---------------------------------------------------------
@@ -278,7 +291,10 @@ class SchedulerTreeRuntime:
     @staticmethod
     def _uses_delayed_fork(run: _TreeRun) -> bool:
         return (
-            run.params.get("fork_at_text") is not None
+            (
+                run.params.get("fork_at_text") is not None
+                or run.params.get("fork_at_entropy") is not None
+            )
             and max(1, int(run.params.get("branches", 1) or 1)) > 1
         )
 
@@ -327,29 +343,105 @@ class SchedulerTreeRuntime:
         if run.forked or run.fork_attempted:
             return False
         delimiter = run.params.get("fork_at_text")
-        tokenizer = getattr(self.scheduler, "tokenizer", None)
-        if not delimiter or tokenizer is None:
-            return False
         output_ids = list(getattr(parent_req, "output_ids", ()))
         if not output_ids:
             return False
-        tail_tokens = max(24, len(delimiter) + 4)
-        try:
-            tail = tokenizer.decode(
-                output_ids[-tail_tokens:], skip_special_tokens=False
-            )
-        except Exception:
-            logger.exception("[tree] delimiter decode failed for %s", run.parent_rid)
-            return False
-        if delimiter not in tail:
-            return False
+        trigger = None
+        if delimiter is not None:
+            tokenizer = getattr(self.scheduler, "tokenizer", None)
+            if not delimiter or tokenizer is None:
+                return False
+            tail_tokens = max(24, len(delimiter) + 4)
+            try:
+                tail = tokenizer.decode(
+                    output_ids[-tail_tokens:], skip_special_tokens=False
+                )
+            except Exception:
+                logger.exception(
+                    "[tree] delimiter decode failed for %s", run.parent_rid
+                )
+                return False
+            if delimiter not in tail:
+                return False
+            trigger = "delimiter"
+        else:
+            threshold = run.params.get("fork_at_entropy")
+            if threshold is None:
+                return False
+            if len(run.entropy_logprobs) == ENTROPY_FORK_WINDOW_SIZE:
+                # This is not distribution entropy. It is a windowed uncertainty
+                # proxy using the mean negative chosen-token logprob in nats.
+                mean_negative_logprob = -sum(run.entropy_logprobs) / len(
+                    run.entropy_logprobs
+                )
+                if mean_negative_logprob > float(threshold):
+                    trigger = (
+                        "chosen-logprob uncertainty "
+                        f"(mean_nll={mean_negative_logprob:.4f})"
+                    )
+            starvation_cap = self._entropy_fork_starvation_cap(run)
+            if trigger is None and len(output_ids) >= starvation_cap:
+                trigger = f"starvation fallback (cap={starvation_cap})"
+            if trigger is None:
+                return False
 
+        return self._trigger_delayed_fork(run, parent_req, output_ids, trigger)
+
+    @staticmethod
+    def _entropy_fork_starvation_cap(run: _TreeRun) -> int:
+        branches = max(1, int(run.params.get("branches", 1) or 1))
+        budget = max(0, int(run.params.get("budget_tokens", 0) or 0))
+        return max(
+            ENTROPY_FORK_STARVATION_MIN_TOKENS,
+            budget // branches // 4,
+        )
+
+    @staticmethod
+    def _request_output_logprobs(req: Any):
+        vals = getattr(req, "output_token_logprobs_val", None)
+        if vals is not None:
+            return vals
+        logprob_state = getattr(req, "logprob", None)
+        return getattr(logprob_state, "output_token_logprobs_val", None)
+
+    @staticmethod
+    def _as_logprob_values(logprob: Any):
+        if logprob is None:
+            return []
+        try:
+            return [float(value) for value in logprob]
+        except TypeError:
+            return [float(logprob)]
+
+    def _record_entropy_logprobs(
+        self, run: _TreeRun, parent_req: Any, logprob: Any
+    ) -> None:
+        stored = self._request_output_logprobs(parent_req)
+        if stored is not None and len(stored) > run.entropy_lp_seen:
+            fresh = stored[run.entropy_lp_seen:]
+            run.entropy_logprobs.extend(float(value) for value in fresh)
+            run.entropy_lp_seen = len(stored)
+
+        current = self._as_logprob_values(logprob)
+        if current:
+            run.entropy_logprobs.extend(current)
+            # The scheduler stores these values after the tree token hook runs.
+            run.entropy_lp_seen += len(current)
+
+    def _trigger_delayed_fork(
+        self,
+        run: _TreeRun,
+        parent_req: Any,
+        output_ids: Any,
+        trigger: str,
+    ) -> bool:
         run.fork_attempted = True
         if not run.fork_cache_supported:
             logger.error(
-                "[tree] %s delimiter reached but fork was refused: no isolated "
+                "[tree] %s %s reached but fork was refused: no isolated "
                 "radix namespace",
                 run.parent_rid,
+                trigger,
             )
             return True
 
@@ -360,10 +452,14 @@ class SchedulerTreeRuntime:
             parent = run.branches["0"]
             parent.tokens = 0
             parent.score = 0.0
-            vals = getattr(parent_req, "output_token_logprobs_val", None)
-            parent.lp_seen = len(vals) if vals else 0
+            vals = self._request_output_logprobs(parent_req)
+            parent.lp_seen = max(
+                len(vals) if vals else 0,
+                run.entropy_lp_seen,
+            )
             run.spent = 0
             run.last_value_check = 0
+            run.entropy_logprobs.clear()
             child_input_ids = (
                 parent_req.origin_input_ids
                 + parent_req.output_ids[:fork_output_len]
@@ -372,14 +468,17 @@ class SchedulerTreeRuntime:
                 run, parent_req, child_input_ids=child_input_ids
             )
             logger.info(
-                "[tree] forked %d at delimiter (k=%d)",
+                "[tree] forked %d at %s (k=%d)",
                 max(0, int(run.params.get("branches", 1) or 1) - 1),
+                trigger,
                 fork_output_len,
             )
         except Exception:
             if len(run.branches) <= 1:
                 self._restore_parent_sampling(run, parent_req)
-            logger.exception("[tree] delimiter fork failed; parent continues alone")
+            logger.exception(
+                "[tree] %s fork failed; parent continues alone", trigger
+            )
         return True
 
     def _cache_parent_generated(
@@ -501,6 +600,8 @@ class SchedulerTreeRuntime:
             state.req = req  # capture the real Req the scheduler created
 
         if state.branch_id == 0 and self._uses_delayed_fork(run) and not run.forked:
+            if run.params.get("fork_at_entropy") is not None:
+                self._record_entropy_logprobs(run, req, logprob)
             self._maybe_trigger_delayed_fork(run, req)
             return
 
