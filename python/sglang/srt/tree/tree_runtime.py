@@ -95,6 +95,12 @@ class TokenizedTreeGenerateReqInput:
 
 VALUE_CHECK_INTERVAL = int(_os.environ.get("AUTOTREE_VALUE_CHECK_INTERVAL", "16"))
 VALUE_WARMUP_TOKENS = int(_os.environ.get("AUTOTREE_VALUE_WARMUP_TOKENS", "8"))
+# Tail-phase snapshot margin: when the parent is within this many tokens of
+# its cap, periodic snapshots start carrying branch outputs (see the
+# branch-0 attach site for the delivery-race rationale).
+TAIL_SNAPSHOT_PARENT_MARGIN = int(
+    _os.environ.get("AUTOTREE_TAIL_SNAPSHOT_MARGIN", "32")
+)
 # Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
 # minority-correct branches (accuracy loss); the naive logprob proxy
 # cannot separate branches more finely. Lower this only with a scorer
@@ -632,7 +638,30 @@ class SchedulerTreeRuntime:
                 self._maybe_majority_lock(run)
 
         if state.branch_id == 0:
-            self._attach_snapshot(run)
+            # The finalize-time snapshot rides the parent's stream; when the
+            # parent finishes (token cap) before the last sibling, that
+            # snapshot has no chunk left to ride and the response ships
+            # without branch outputs (measured: 26% empty branch_answers).
+            # Once the run enters its tail phase - any sibling finished, or
+            # the parent within TAIL_SNAPSHOT_PARENT_MARGIN tokens of its
+            # cap - periodic snapshots carry outputs too, so the last
+            # snapshot to escape always has them.
+            include_outputs = False
+            if run.forked and not run.finalized:
+                if any(
+                    b.req is not None and b.req.finished()
+                    for b in run.branches.values()
+                    if b.branch_id != 0
+                ):
+                    include_outputs = True
+                else:
+                    parent_sp = getattr(req, "sampling_params", None)
+                    parent_cap = getattr(parent_sp, "max_new_tokens", None)
+                    if parent_cap:
+                        remaining = int(parent_cap) - len(req.output_ids)
+                        if remaining <= TAIL_SNAPSHOT_PARENT_MARGIN:
+                            include_outputs = True
+            self._attach_snapshot(run, include_outputs=include_outputs)
             if (
                 not run.finalized
                 and len(run.branches) > 1
