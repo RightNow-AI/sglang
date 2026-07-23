@@ -580,6 +580,12 @@ class SchedulerTreeRuntime:
         marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
         raw = marked[-1] if marked else None
         if raw is None:
+            # Instructed answer format ("Answer: <number>") beats the bare
+            # last-number fallback: trailing numbers after the answer line
+            # (units, prices) would otherwise corrupt the vote.
+            answered = re.findall(r"[Aa]nswer\s*:\s*\$?\s*([-+]?[\d.,]+)", text)
+            raw = answered[-1] if answered else None
+        if raw is None:
             nums = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
             raw = nums[-1] if nums else None
         if raw is None:
@@ -727,7 +733,27 @@ class SchedulerTreeRuntime:
         active = [b for b in run.branches.values() if b.state == "active"]
         if not active:
             return
-        winner = max(active, key=lambda b: (b.mean_logprob(), -b.branch_id))
+        # Self-consistency winner selection: the plurality answer across
+        # finished branches beats confidence-argmax on reasoning tasks, so
+        # vote first and use mean-logprob only to choose among the branches
+        # holding the winning answer (and as the fallback when no branch
+        # yields an extractable answer).
+        votes: Dict[str, int] = {}
+        for b in active:
+            answer = self._extract_branch_answer(b)
+            if answer:
+                votes[answer] = votes.get(answer, 0) + 1
+        pool = active
+        if votes:
+            top_count = max(votes.values())
+            leaders = {a for a, c in votes.items() if c == top_count}
+            voted = [
+                b for b in active
+                if (self._extract_branch_answer(b) or "") in leaders
+            ]
+            if voted:
+                pool = voted
+        winner = max(pool, key=lambda b: (b.mean_logprob(), -b.branch_id))
         run.winner_branch_id = winner.branch_id
         logger.info(
             "[tree] %s finalize (%s): winner=branch-%d spent=%d pruned=%d",
