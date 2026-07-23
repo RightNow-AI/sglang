@@ -765,8 +765,14 @@ class SchedulerTreeRuntime:
         # leak abort from the invariant checker). The serving layer reconstructs
         # the winner's text from the final snapshot instead.
 
+        # Branch states must be final before the snapshot is published, but the
+        # snapshot must land on the parent BEFORE any to_finish is set: once
+        # the parent's stream can complete, a snapshot attached afterwards can
+        # lose the race and the response ships without branch outputs
+        # (observed on GPU: empty branch_answers on ~40% of items).
         from sglang.srt.managers.schedule_batch import FINISH_LENGTH
 
+        finish_targets = []
         for branch in run.branches.values():
             if branch.state != "active":
                 continue
@@ -776,9 +782,12 @@ class SchedulerTreeRuntime:
             target = branch.req
             if target is None:
                 continue
-            target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
+            finish_targets.append(target)
 
         self._attach_snapshot(run, include_outputs=True)
+
+        for target in finish_targets:
+            target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
 
 
 _ACTIVE: Optional[SchedulerTreeRuntime] = None
