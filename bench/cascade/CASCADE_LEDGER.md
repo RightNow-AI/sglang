@@ -211,3 +211,79 @@ greedy fallback at http://127.0.0.1:30001/v1/chat/completions.
 No GPU server or tokenizer was available in this lane, so native response
 compatibility and the four-characters-per-token span estimate still require
 orchestrator validation on the served large model.
+
+# Learned escalation gate wiring
+
+Date: 2026-07-23
+
+Lane: `feat/gated-cascade`
+
+## Scope
+
+- Enhanced `bench/cascade/measure_cascade.py` in place.
+- Added `--gate-model`, `--gate-threshold` with default `0.75`, and `--gate-selftest MODEL_JSON ITEMS_JSONL`.
+- No non-stdlib runtime dependency was added.
+- No commit, push, or pytest run was performed.
+
+## Mirrored feature contract
+
+The harness uses the exact ordered feature list declared in `bench/valuehead/train_gate.py:14-24`:
+
+1. `leader_count`: validated maximum normalized vote count, then converted to float.
+2. `voter_count`: count of non-null numeric branch answers, then converted to float.
+3. `leader_share`: `leader_count / max(voter_count, 1)`.
+4. `n_distinct_answers`: number of distinct normalized numeric answers, then converted to float.
+5. `second_count`: second-highest normalized vote count or zero, then converted to float.
+6. `margin`: `(leader_count - second_count) / max(voter_count, 1)`.
+7. `null_fraction`: `(branches - voter_count) / branches`.
+8. `leader_matches_winner`: `1.0` for true and `0.0` for false.
+9. `small_tokens_per_branch`: `(small_tokens / branches) / 512.0`.
+
+Parity sources:
+
+- Canonical numeric answer normalization, including whitespace removal, currency/comma/percent removal, sign handling, leading-zero removal, and trailing fractional-zero removal: `bench/valuehead/train_gate.py:33-54`.
+- Missing vote handling, numeric vote validation, count validation, feature order, and feature formulas: `bench/valuehead/train_gate.py:70-124`.
+- Stored-standardizer application with zero standard deviation mapped to scale `1.0`: `bench/valuehead/train_gate.py:213-220`.
+- Numerically stable sigmoid: `bench/valuehead/train_gate.py:223-228`.
+- Model JSON field layout, ordered feature names, named means/stds/weights, intercept, and the `512.0` token scale: `bench/valuehead/train_gate.py:704-750`.
+- Saved-model validation and named parameter loading: `bench/valuehead/train_gate.py:825-858`.
+
+## Runtime behavior
+
+- With `--gate-model`, `cascade` and `cascade_score` compute the mirrored features, standardize with stored means/stds, apply the logistic intercept and weights, and accept the small answer only when the small response is otherwise valid and `gate_p >= gate_threshold`.
+- Empty or missing `branch_answers` auto-escalate with `gate_p: null` and `chosen_by: "no_votes"`.
+- Malformed vote payloads do not crash the run. They auto-escalate with a null probability when the parity feature contract cannot be satisfied.
+- Gated item records include `gate_p`, `gate_threshold`, and `gated: true`.
+- Gated summary config includes `gate_model` as `{basename, sha256}` plus `gate_threshold`.
+- Use a fresh `--out-jsonl` whenever the gate model or gate threshold changes because the existing resume key remains `(mode, seed, id)`.
+- `--dry-run` is unchanged except for a top-level gate config when a model is set.
+- Without `--gate-model`, the original fixed rule remains the only confidence path and no gate fields are serialized.
+- Compare keeps its existing common comparability keys. `gate_model` and `gate_threshold` are additionally compared only when at least two compared documents are tree modes (`cascade` or `cascade_score`), so large baselines tolerate the new tree-only config keys.
+
+## Gate selftest
+
+No `AGENTS-GOALs` directory or lane sample records were reachable, so the selftest used five synthetic valid cascade records. Keys are sorted, feature and probability values use fixed 12-decimal strings, and each record is one JSON line.
+
+```json
+{"error":null,"feature_names":["leader_count","voter_count","leader_share","n_distinct_answers","second_count","margin","null_fraction","leader_matches_winner","small_tokens_per_branch"],"features":{"leader_count":"6.000000000000","leader_matches_winner":"1.000000000000","leader_share":"0.857142857143","margin":"0.714285714286","n_distinct_answers":"2.000000000000","null_fraction":"0.125000000000","second_count":"1.000000000000","small_tokens_per_branch":"0.500000000000","voter_count":"7.000000000000"},"gate_p":"0.000000352173","id":"sample-1","index":1,"line":1}
+{"error":null,"feature_names":["leader_count","voter_count","leader_share","n_distinct_answers","second_count","margin","null_fraction","leader_matches_winner","small_tokens_per_branch"],"features":{"leader_count":"4.000000000000","leader_matches_winner":"0.000000000000","leader_share":"0.571428571429","margin":"0.142857142857","n_distinct_answers":"2.000000000000","null_fraction":"0.125000000000","second_count":"3.000000000000","small_tokens_per_branch":"0.250000000000","voter_count":"7.000000000000"},"gate_p":"0.000003197052","id":"sample-2","index":2,"line":2}
+{"error":null,"feature_names":["leader_count","voter_count","leader_share","n_distinct_answers","second_count","margin","null_fraction","leader_matches_winner","small_tokens_per_branch"],"features":{"leader_count":"0.000000000000","leader_matches_winner":"0.000000000000","leader_share":"0.000000000000","margin":"0.000000000000","n_distinct_answers":"0.000000000000","null_fraction":"1.000000000000","second_count":"0.000000000000","small_tokens_per_branch":"0.000000000000","voter_count":"0.000000000000"},"gate_p":"0.370440466907","id":"sample-3","index":3,"line":3}
+{"error":null,"feature_names":["leader_count","voter_count","leader_share","n_distinct_answers","second_count","margin","null_fraction","leader_matches_winner","small_tokens_per_branch"],"features":{"leader_count":"2.000000000000","leader_matches_winner":"1.000000000000","leader_share":"0.400000000000","margin":"0.000000000000","n_distinct_answers":"3.000000000000","null_fraction":"0.000000000000","second_count":"2.000000000000","small_tokens_per_branch":"0.500000000000","voter_count":"5.000000000000"},"gate_p":"0.000398595074","id":"sample-4","index":4,"line":4}
+{"error":null,"feature_names":["leader_count","voter_count","leader_share","n_distinct_answers","second_count","margin","null_fraction","leader_matches_winner","small_tokens_per_branch"],"features":{"leader_count":"2.000000000000","leader_matches_winner":"0.000000000000","leader_share":"0.333333333333","margin":"0.166666666667","n_distinct_answers":"5.000000000000","null_fraction":"0.250000000000","second_count":"1.000000000000","small_tokens_per_branch":"0.750000000000","voter_count":"6.000000000000"},"gate_p":"0.000103751354","id":"sample-5","index":5,"line":5}
+```
+
+The printed features and probabilities were cross-checked against `train_gate.py`'s `require_cascade_features`, `load_model`, `standardize_rows`, and `predict_probabilities` implementations. Result: `PARITY_OK records=5 tolerance=5e-13`.
+
+Additional focused checks:
+
+- `EDGE_OK empty_votes malformed_votes baseline_rule tree_compare_keys`
+- `NO_VOTES_OK cascade cascade_score chosen_by=no_votes gate_p=null`
+- `BASELINE_IDENTICAL modes=2 confidence_paths=2 records_exact`
+- Python AST parse passed.
+- CLI help exposes all three gate arguments.
+- `git diff --check` passed.
+
+## Uncertainty and environment note
+
+- The real small-tree and large-model endpoints were not called, so live service integration remains unverified.
+- A failed Python `tempfile` attempt created an empty untracked directory named `.cascade-gate-_o3wsxqm` at the worktree root with an ACL that this sandbox cannot inspect or remove. It contains no fixture files and does not appear in the tracked diff. The synthetic fixture files used for the successful checks were removed.

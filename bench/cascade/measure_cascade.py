@@ -4,7 +4,9 @@
 import argparse
 import collections
 import concurrent.futures
+import hashlib
 import json
+import math
 import os
 import queue
 import re
@@ -23,6 +25,18 @@ NUMBER_RE = re.compile(
     r"[-+]?\s*\$?\s*(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)\s*%?"
 )
 MODES = ("cascade", "large_bo8", "large_greedy", "cascade_score")
+GATE_FEATURE_NAMES = (
+    "leader_count",
+    "voter_count",
+    "leader_share",
+    "n_distinct_answers",
+    "second_count",
+    "margin",
+    "null_fraction",
+    "leader_matches_winner",
+    "small_tokens_per_branch",
+)
+GATE_MODEL_VERSION = 1
 
 
 def normalize_number(value):
@@ -300,6 +314,248 @@ def finite_number(value):
     return number
 
 
+def gate_nonnegative_int(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def require_gate_features(record, path, line_number):
+    """Mirror bench/valuehead/train_gate.py require_cascade_features exactly."""
+    where = "{} line {}".format(path, line_number)
+    if record.get("mode") != "cascade":
+        raise ValueError("{} field 'mode' must be 'cascade'".format(where))
+    branch_answers = record.get("branch_answers")
+    if not isinstance(branch_answers, dict):
+        raise ValueError("{} field 'branch_answers' must be an object".format(where))
+    branches = len(branch_answers)
+    if branches <= 0:
+        raise ValueError("{} has no branches in 'branch_answers'".format(where))
+
+    votes = []
+    for branch_id, answer in branch_answers.items():
+        if answer is None:
+            continue
+        normalized = normalize_number(answer)
+        if normalized is None:
+            raise ValueError(
+                "{} branch {!r} has a non-numeric answer".format(where, branch_id)
+            )
+        votes.append(normalized)
+    voter_count = gate_nonnegative_int(record.get("voter_count"))
+    if voter_count is None or voter_count != len(votes):
+        raise ValueError(
+            "{} voter_count must match numeric branch answers".format(where)
+        )
+    counts = collections.Counter(votes)
+    ranked_counts = sorted(counts.values(), reverse=True)
+    computed_leader_count = ranked_counts[0] if ranked_counts else 0
+    leader_count = gate_nonnegative_int(record.get("leader_count"))
+    if leader_count is None or leader_count != computed_leader_count:
+        raise ValueError("{} leader_count must match branch answers".format(where))
+    leader_matches_winner = record.get("leader_matches_winner")
+    if not isinstance(leader_matches_winner, bool):
+        raise ValueError("{} leader_matches_winner must be bool".format(where))
+    small_tokens = nonnegative_number(record.get("small_tokens"))
+    if small_tokens is None:
+        raise ValueError("{} small_tokens must be nonnegative".format(where))
+
+    second_count = ranked_counts[1] if len(ranked_counts) > 1 else 0
+    voter_denominator = max(voter_count, 1)
+    return [
+        float(leader_count),
+        float(voter_count),
+        leader_count / voter_denominator,
+        float(len(counts)),
+        float(second_count),
+        (leader_count - second_count) / voter_denominator,
+        (branches - voter_count) / branches,
+        1.0 if leader_matches_winner else 0.0,
+        (small_tokens / branches) / 512.0,
+    ]
+
+
+def gate_sigmoid(value):
+    if value >= 0.0:
+        exponent = math.exp(-value)
+        return 1.0 / (1.0 + exponent)
+    exponent = math.exp(value)
+    return exponent / (1.0 + exponent)
+
+
+def load_gate_model(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        model = json.load(handle)
+    if not isinstance(model, dict):
+        raise ValueError("{} does not contain a JSON object".format(path))
+    if (
+        model.get("model_type") != "logistic_regression"
+        or model.get("version") != GATE_MODEL_VERSION
+        or model.get("feature_names") != list(GATE_FEATURE_NAMES)
+    ):
+        raise ValueError("{} is not a supported gate model".format(path))
+    standardization = model.get("standardization")
+    weights_by_name = model.get("weights")
+    if not isinstance(standardization, dict) or not isinstance(weights_by_name, dict):
+        raise ValueError("{} is missing standardization or weights".format(path))
+    try:
+        means = [float(standardization["means"][name]) for name in GATE_FEATURE_NAMES]
+        stds = [float(standardization["stds"][name]) for name in GATE_FEATURE_NAMES]
+        weights = [float(weights_by_name[name]) for name in GATE_FEATURE_NAMES]
+        intercept = float(model["intercept"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("{} has invalid model parameters".format(path)) from exc
+    values = means + stds + weights + [intercept]
+    if not all(math.isfinite(value) for value in values) or any(
+        value < 0.0 for value in stds
+    ):
+        raise ValueError("{} has non-finite parameters or negative stds".format(path))
+    return {
+        "intercept": intercept,
+        "means": means,
+        "stds": stds,
+        "weights": weights,
+    }
+
+
+def gate_model_config(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return {"basename": os.path.basename(path), "sha256": digest.hexdigest()}
+
+
+def gate_probability(features, model):
+    standardized = [
+        (value - model["means"][index])
+        / (model["stds"][index] if model["stds"][index] > 0.0 else 1.0)
+        for index, value in enumerate(features)
+    ]
+    logit = model["intercept"] + sum(
+        weight * value for weight, value in zip(model["weights"], standardized)
+    )
+    return gate_sigmoid(logit)
+
+
+def confidence_decision(
+    args,
+    small_response_valid,
+    branch_answers,
+    leader_count,
+    voter_count,
+    leader_matches_winner,
+    small_tokens,
+):
+    if not args.gate_model:
+        return (
+            small_response_valid
+            and leader_count >= args.agree_threshold
+            and voter_count >= 4,
+            None,
+            False,
+        )
+    if not isinstance(branch_answers, dict) or not branch_answers:
+        return False, None, True
+    feature_record = {
+        "mode": "cascade",
+        "branch_answers": branch_answers,
+        "leader_count": leader_count,
+        "voter_count": voter_count,
+        "leader_matches_winner": leader_matches_winner,
+        "small_tokens": small_tokens,
+    }
+    try:
+        features = require_gate_features(feature_record, "<runtime>", 1)
+    except (TypeError, ValueError):
+        return False, None, False
+    probability = gate_probability(features, args.gate_model_data)
+    return (
+        small_response_valid and probability >= args.gate_threshold,
+        probability,
+        False,
+    )
+
+
+def add_gate_fields(record, args, probability):
+    if args.gate_model:
+        record.update(
+            {
+                "gate_p": probability,
+                "gate_threshold": args.gate_threshold,
+                "gated": True,
+            }
+        )
+
+
+def format_selftest_float(value):
+    return "{:.12f}".format(value)
+
+
+def run_gate_selftest(model_path, items_path):
+    model = load_gate_model(model_path)
+    record_index = 0
+    with open(items_path, "r", encoding="utf-8-sig") as handle:
+        for line_number, raw_line in enumerate(handle, 1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "invalid JSON in {} line {}: {}".format(
+                        items_path, line_number, exc
+                    )
+                ) from exc
+            if not isinstance(record, dict):
+                raise ValueError(
+                    "{} line {} is not a JSON object".format(items_path, line_number)
+                )
+            record_index += 1
+            output = {
+                "feature_names": list(GATE_FEATURE_NAMES),
+                "id": record.get("id"),
+                "index": record_index,
+                "line": line_number,
+            }
+            if record.get("error") is not None:
+                output.update(
+                    {"error": "input_error", "features": None, "gate_p": None}
+                )
+            else:
+                try:
+                    features = require_gate_features(record, items_path, line_number)
+                    probability = gate_probability(features, model)
+                    output.update(
+                        {
+                            "error": None,
+                            "features": {
+                                name: format_selftest_float(features[index])
+                                for index, name in enumerate(GATE_FEATURE_NAMES)
+                            },
+                            "gate_p": format_selftest_float(probability),
+                        }
+                    )
+                except (TypeError, ValueError) as exc:
+                    output.update({"error": str(exc), "features": None, "gate_p": None})
+            print(
+                json.dumps(
+                    output,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            if record_index == 5:
+                break
+    if record_index == 0:
+        raise ValueError("{} contains no JSON records".format(items_path))
+
+
 def completion_content(payload):
     if not isinstance(payload, dict):
         return None, "missing_response_object"
@@ -556,11 +812,16 @@ def run_cascade_item(args, item, base_seed):
     if request_error is None and not branch_report_valid:
         add_error(errors, "small:invalid_branch_answers")
 
+    leader_matches_winner = branch_leader is not None and branch_leader == winner_answer
     small_response_valid = not errors
-    confident = (
-        small_response_valid
-        and leader_count >= args.agree_threshold
-        and voter_count >= 4
+    confident, gate_p, no_votes = confidence_decision(
+        args,
+        small_response_valid,
+        branch_answers,
+        leader_count,
+        voter_count,
+        leader_matches_winner,
+        small_tokens,
     )
     escalated = not confident
     large_tokens = 0
@@ -594,12 +855,13 @@ def run_cascade_item(args, item, base_seed):
             "branch_answer_leader": branch_leader,
             "leader_count": leader_count,
             "voter_count": voter_count,
-            "leader_matches_winner": (
-                branch_leader is not None and branch_leader == winner_answer
-            ),
+            "leader_matches_winner": leader_matches_winner,
             "winner_branch_id": tree_winner_branch_id(payload),
         }
     )
+    add_gate_fields(record, args, gate_p)
+    if args.gate_model and no_votes:
+        record["chosen_by"] = "no_votes"
     return record
 
 
@@ -626,11 +888,16 @@ def run_cascade_score_item(args, item, base_seed):
     if request_error is None and not branch_report_valid:
         add_error(errors, "small:invalid_branch_answers")
 
+    leader_matches_winner = branch_leader is not None and branch_leader == winner_answer
     small_response_valid = not errors
-    confident = (
-        small_response_valid
-        and leader_count >= args.agree_threshold
-        and voter_count >= 4
+    confident, gate_p, no_votes = confidence_decision(
+        args,
+        small_response_valid,
+        branch_answers,
+        leader_count,
+        voter_count,
+        leader_matches_winner,
+        small_tokens,
     )
     escalated = not confident
     candidates = ranked_branch_candidates(payload, branch_answers)
@@ -675,9 +942,7 @@ def run_cascade_score_item(args, item, base_seed):
         else:
             add_error(
                 scoring_errors,
-                "selection:need_two_distinct_candidates_got_{}".format(
-                    len(candidates)
-                ),
+                "selection:need_two_distinct_candidates_got_{}".format(len(candidates)),
             )
 
         scores_available = len(candidates) == 2 and all(
@@ -696,6 +961,8 @@ def run_cascade_score_item(args, item, base_seed):
             chosen_by = "fallback"
             for error in prefixed_errors("large", large["errors"]):
                 add_error(errors, error)
+        if no_votes:
+            chosen_by = "no_votes"
 
     record = common_record(
         args,
@@ -718,9 +985,7 @@ def run_cascade_score_item(args, item, base_seed):
             "branch_answer_leader": branch_leader,
             "leader_count": leader_count,
             "voter_count": voter_count,
-            "leader_matches_winner": (
-                branch_leader is not None and branch_leader == winner_answer
-            ),
+            "leader_matches_winner": leader_matches_winner,
             "winner_branch_id": tree_winner_branch_id(payload),
             "scored_candidates": scored_candidates,
             "span_scores": span_scores,
@@ -732,6 +997,7 @@ def run_cascade_score_item(args, item, base_seed):
             "chosen_by": chosen_by,
         }
     )
+    add_gate_fields(record, args, gate_p)
     return record
 
 
@@ -833,6 +1099,9 @@ def error_record(args, item, base_seed, exc):
                 "winner_branch_id": None,
             }
         )
+        add_gate_fields(record, args, None)
+        if args.gate_model:
+            record["chosen_by"] = "no_votes"
     elif args.mode == "cascade_score":
         record.update(
             {
@@ -852,9 +1121,10 @@ def error_record(args, item, base_seed, exc):
                 "scoring_prompt_tokens": {},
                 "scoring_prompt_token_sources": {},
                 "scoring_errors": ["internal_error:scoring_not_completed"],
-                "chosen_by": "fallback",
+                "chosen_by": "no_votes" if args.gate_model else "fallback",
             }
         )
+        add_gate_fields(record, args, None)
     elif args.mode == "large_bo8":
         record["sample_answers"] = []
     return record
@@ -958,7 +1228,7 @@ def valid_resume_record(record):
             nonnegative_int(record.get("large_prefill_tokens")) is None
             or not isinstance(record.get("scored_candidates"), list)
             or not isinstance(record.get("scoring_errors"), list)
-            or record.get("chosen_by") not in ("vote", "score", "fallback")
+            or record.get("chosen_by") not in ("vote", "score", "fallback", "no_votes")
         ):
             return False
         for field in (
@@ -970,6 +1240,20 @@ def valid_resume_record(record):
         ):
             if not isinstance(record.get(field), dict):
                 return False
+    gate_fields = ("gate_p", "gate_threshold", "gated")
+    if any(field in record for field in gate_fields):
+        if any(field not in record for field in gate_fields):
+            return False
+        gate_p = record.get("gate_p")
+        gate_threshold = finite_number(record.get("gate_threshold"))
+        if (
+            record.get("gated") is not True
+            or (gate_p is not None and finite_number(gate_p) is None)
+            or gate_threshold is None
+            or gate_threshold < 0.0
+            or gate_threshold > 1.0
+        ):
+            return False
     if key[0] == "large_bo8" and not isinstance(record.get("sample_answers"), list):
         return False
     return True
@@ -1254,6 +1538,13 @@ def run_benchmark(args, items, seeds):
     }
     if args.mode == "cascade_score":
         output["config"]["large_prefill_cost"] = args.large_prefill_cost
+    if args.gate_model:
+        output["config"].update(
+            {
+                "gate_model": args.gate_model_config,
+                "gate_threshold": args.gate_threshold,
+            }
+        )
     write_json_atomic(args.out, output)
     print_summary_table(summaries)
     print("summary_json: {}".format(os.path.abspath(args.out)))
@@ -1353,11 +1644,28 @@ def compare_config_mismatches(documents):
         "answer_suffix",
     )
     first = configs[0]
-    return [
+    mismatches = [
         key
         for key in keys
         if any(config.get(key) != first.get(key) for config in configs[1:])
     ]
+    tree_configs = []
+    for document, config in zip(documents, configs):
+        modes = {
+            row.get("mode")
+            for row in summary_rows(document)
+            if row.get("mode") in ("cascade", "cascade_score")
+        }
+        if modes:
+            tree_configs.append(config)
+    if len(tree_configs) > 1:
+        first_tree = tree_configs[0]
+        for key in ("gate_model", "gate_threshold"):
+            if any(
+                config.get(key) != first_tree.get(key) for config in tree_configs[1:]
+            ):
+                mismatches.append(key)
+    return mismatches
 
 
 def ratio(numerator, denominator):
@@ -1563,6 +1871,11 @@ def print_dry_run(args, item, seed):
             "body": large_greedy_body(args, item, seed),
         },
     }
+    if args.gate_model:
+        document["gate"] = {
+            "model": args.gate_model_config,
+            "threshold": args.gate_threshold,
+        }
     print(json.dumps(document, indent=2, sort_keys=True))
 
 
@@ -1581,6 +1894,14 @@ def build_parser():
     parser.add_argument("--large-url", default="http://127.0.0.1:30001")
     parser.add_argument("--branches", type=int, default=8)
     parser.add_argument("--agree-threshold", type=int, default=6)
+    parser.add_argument("--gate-model", help="learned escalation gate model JSON")
+    parser.add_argument("--gate-threshold", type=float, default=0.75)
+    parser.add_argument(
+        "--gate-selftest",
+        nargs=2,
+        metavar=("MODEL_JSON", "ITEMS_JSONL"),
+        help="print harness gate features and probabilities for the first 5 records",
+    )
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--small-cost", type=float, default=1.0)
@@ -1618,7 +1939,9 @@ def build_parser():
 def validate_measurement_args(parser, args):
     if not args.data:
         parser.error("--data is required unless --compare is used")
-    if (args.mode in ("cascade", "cascade_score") or args.dry_run) and not args.small_model:
+    if (
+        args.mode in ("cascade", "cascade_score") or args.dry_run
+    ) and not args.small_model:
         parser.error(
             "--small-model is required for cascade, cascade_score, and --dry-run"
         )
@@ -1628,6 +1951,14 @@ def validate_measurement_args(parser, args):
         parser.error("--branches must be between 1 and 64")
     if args.agree_threshold <= 0:
         parser.error("--agree-threshold must be positive")
+    if not math.isfinite(args.gate_threshold) or not 0.0 <= args.gate_threshold <= 1.0:
+        parser.error("--gate-threshold must be finite and between 0 and 1")
+    if (
+        args.gate_model
+        and not args.dry_run
+        and args.mode not in ("cascade", "cascade_score")
+    ):
+        parser.error("--gate-model requires mode cascade or cascade_score")
     if args.max_tokens <= 0 or args.max_tokens > 4096:
         parser.error("--max-tokens must be between 1 and 4096")
     if args.temperature <= 0 or args.temperature > 2.0:
@@ -1662,6 +1993,14 @@ def validate_measurement_args(parser, args):
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    if args.gate_selftest:
+        if args.compare:
+            parser.error("--gate-selftest cannot be combined with --compare")
+        try:
+            run_gate_selftest(*args.gate_selftest)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        return 0
     if args.compare:
         if len(args.compare) not in (2, 3):
             parser.error("--compare requires two or three summary JSON files")
@@ -1672,6 +2011,14 @@ def main():
         return 0
 
     validate_measurement_args(parser, args)
+    args.gate_model_data = None
+    args.gate_model_config = None
+    if args.gate_model:
+        try:
+            args.gate_model_data = load_gate_model(args.gate_model)
+            args.gate_model_config = gate_model_config(args.gate_model)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
     try:
         seeds = parse_seeds(args.seeds)
         items = load_items(args.data, args.offset, args.limit)
