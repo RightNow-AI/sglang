@@ -90,6 +90,7 @@ class TreeSummaryResponse(BaseModel):
     final_scores: Dict[str, float]
     scorer: Optional[str]
     kv_reuse_ratio: Optional[float] = None
+    branch_answers: Dict[str, Optional[str]] = {}
 
 
 class TreeResponseMessage(BaseModel):

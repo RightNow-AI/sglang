@@ -79,6 +79,13 @@ class TreeSummary:
     final_scores: Dict[str, float]
     scorer: Optional[str]
     kv_reuse_ratio: Optional[float]
+    # Per-branch extracted final answers (branch_id -> canonical number string
+    # or None). Lets clients compute vote counts and agreement margins - the
+    # escalation signal for cascade routing. Empty dict when the runtime did
+    # not surface branch outputs.
+    branch_answers: Dict[str, Optional[str]] = dataclasses.field(
+        default_factory=dict
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

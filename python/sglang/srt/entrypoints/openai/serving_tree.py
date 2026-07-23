@@ -168,6 +168,11 @@ class OpenAIServingTree(OpenAIServingBase):
             # answer, and take the majority. Ties and no-answer cases fall back
             # to the value proxy's leading branch.
             branch_texts = self._detokenize_branches(branches)
+            branch_answers = (
+                {bid: self._extract_answer(t) for bid, t in branch_texts.items()}
+                if branch_texts
+                else {}
+            )
             if branch_texts:
                 voted = self._self_consistency_vote(branches, branch_texts)
                 if voted is not None:
@@ -195,6 +200,7 @@ class OpenAIServingTree(OpenAIServingBase):
                 },
                 scorer=used_scorer,
                 kv_reuse_ratio=None,
+                branch_answers=branch_answers,
             )
             return TreeResult(
                 winner_text=text,
@@ -251,6 +257,11 @@ class OpenAIServingTree(OpenAIServingBase):
 
         marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
         raw = marked[-1] if marked else None
+        if raw is None:
+            # Instructed answer format ("Answer: <number>") beats the bare
+            # last-number fallback, which trailing units or prices corrupt.
+            answered = re.findall(r"[Aa]nswer\s*:\s*\$?\s*([-+]?[\d.,]+)", text)
+            raw = answered[-1] if answered else None
         if raw is None:
             numbers = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
             raw = numbers[-1] if numbers else None
@@ -455,4 +466,5 @@ class OpenAIServingTree(OpenAIServingBase):
             final_scores=summary.final_scores,
             scorer=summary.scorer,
             kv_reuse_ratio=summary.kv_reuse_ratio,
+            branch_answers=getattr(summary, "branch_answers", {}) or {},
         )
