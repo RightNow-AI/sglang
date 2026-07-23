@@ -115,3 +115,13 @@ true, comparison prints a NOTE that bon wall times are parallel.
 Run the strong latency baseline with:
 
     python3 bench/pruning/measure_pruning_economics.py --mode bon --bon-parallel --data "$DATA" --model "$MODEL" --base-url http://127.0.0.1:30000 --seeds "0,1,2" --branches 8 --max-tokens 512 --temperature 0.7 --timeout 300 --concurrency 4 --out-jsonl bench/pruning/bon_parallel_items.jsonl --out bench/pruning/bon_parallel.json
+
+## Publication figures
+
+Render pooled multi-seed results with per-seed accuracy ranges:
+
+    python3 bench/pruning/plot_pareto.py --summaries bench/pruning/tree.json bench/pruning/bon.json --label bench/pruning/tree.json="AutoTree pruning" --label bench/pruning/bon.json="Sequential best-of-n"
+
+The command writes `pareto` and `tokens_per_correct` in PDF, SVG, and PNG
+formats under `bench/pruning/figures` by default. Use `--demo` for a complete
+synthetic-data rendering check without benchmark traffic.
