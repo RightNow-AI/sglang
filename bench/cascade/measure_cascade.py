@@ -237,17 +237,23 @@ def sample_seed(base_seed, item, sample_index):
 
 
 def small_tree_body(args, item, base_seed):
+    tree = {
+        "policy": "beam",
+        "branches": args.branches,
+        "budget_tokens": args.branches * args.max_tokens,
+    }
+    if args.fork_at_entropy is not None:
+        # Entropy-triggered adaptive forking: the parent decodes alone until
+        # its windowed uncertainty proxy crosses this threshold (nats), then
+        # all branches fork at that point (engine feature fork_at_entropy).
+        tree["fork_at_entropy"] = args.fork_at_entropy
     return {
         "model": args.small_model,
         "messages": prompt_messages(item),
         "max_tokens": args.max_tokens,
         "temperature": args.temperature,
         "seed": item_seed(base_seed, item),
-        "tree": {
-            "policy": "beam",
-            "branches": args.branches,
-            "budget_tokens": args.branches * args.max_tokens,
-        },
+        "tree": tree,
     }
 
 
@@ -1602,6 +1608,7 @@ def run_benchmark(args, items, seeds):
             "timeout": args.timeout,
             "concurrency": args.concurrency,
             "answer_mode": args.answer_mode,
+            "fork_at_entropy": args.fork_at_entropy,
             "answer_suffix": answer_suffix(),
             "out_jsonl": os.path.abspath(args.out_jsonl),
         },
@@ -1713,6 +1720,7 @@ def compare_config_mismatches(documents):
         "timeout",
         "concurrency",
         "answer_mode",
+        "fork_at_entropy",
         "answer_suffix",
     )
     first = configs[0]
@@ -1971,6 +1979,11 @@ def build_parser():
         choices=("numeric", "math"),
         default="numeric",
         help="math routes extraction/equivalence through bench/tasks/math_equiv.py",
+    )
+    parser.add_argument(
+        "--fork-at-entropy",
+        type=float,
+        help="entropy-fork threshold (nats) passed to the small tree server",
     )
     parser.add_argument("--gate-model", help="learned escalation gate model JSON")
     parser.add_argument("--gate-threshold", type=float, default=0.75)
