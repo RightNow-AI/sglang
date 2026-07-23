@@ -692,17 +692,26 @@ def branch_answer_report(payload):
             normalized[key] = None
             continue
         if not isinstance(value, str):
+            # Non-string, non-null values are protocol corruption.
             normalized[key] = None
             valid = False
             continue
-        answer = normalize_number(value)
-        normalized[key] = answer
-        if answer is None:
-            valid = False
+        if ANSWER_MODE == "math":
+            answer = value.strip() or None
         else:
+            # Numeric mode: the server may legitimately send non-numeric
+            # string votes (word answers). They abstain rather than
+            # invalidating the whole report.
+            answer = normalize_number(value)
+        normalized[key] = answer
+        if answer is not None:
             voters.append(answer)
     leader = majority_vote(voters)
-    leader_count = voters.count(leader) if leader is not None else 0
+    if leader is None:
+        leader_count = 0
+    else:
+        leader_key = vote_key(leader)
+        leader_count = sum(1 for v in voters if vote_key(v) == leader_key)
     return normalized, leader, leader_count, len(voters), valid
 
 
