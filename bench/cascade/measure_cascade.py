@@ -21,6 +21,64 @@ ANSWER_SUFFIX = (
     "\nSolve step by step, then give the final numeric answer on the last line as: "
     "Answer: <number>"
 )
+ANSWER_SUFFIX_MATH = (
+    "\nSolve step by step, then give the final answer on the last line as: "
+    "Answer: <answer>"
+)
+# Answer handling mode, set once by main() before any item work. "numeric"
+# is the exact historical behavior; "math" routes extraction, equivalence,
+# and vote keying through bench/tasks/math_equiv.py so LaTeX answers
+# (\frac{3}{2}, 90^\circ) are judged by mathematical equivalence.
+ANSWER_MODE = "numeric"
+_MATH_EQUIV = None
+
+
+def set_answer_mode(mode):
+    global ANSWER_MODE, _MATH_EQUIV
+    ANSWER_MODE = mode
+    if mode == "math" and _MATH_EQUIV is None:
+        import importlib.util
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "tasks",
+            "math_equiv.py",
+        )
+        spec = importlib.util.spec_from_file_location("math_equiv", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _MATH_EQUIV = module
+
+
+def answer_suffix():
+    return ANSWER_SUFFIX_MATH if ANSWER_MODE == "math" else ANSWER_SUFFIX
+
+
+def answers_match(candidate, reference):
+    if candidate is None or reference is None:
+        return False
+    if ANSWER_MODE == "math":
+        try:
+            return bool(_MATH_EQUIV.is_equiv(candidate, reference))
+        except Exception:
+            return False
+    return candidate == reference
+
+
+def vote_key(answer):
+    """Group key for majority voting: math mode groups by normalized
+    equivalence class so \\frac{1}{2} and 0.5 vote together."""
+    if answer is None:
+        return None
+    if ANSWER_MODE == "math":
+        try:
+            return _MATH_EQUIV.normalize_answer(answer) or answer
+        except Exception:
+            return answer
+    return answer
+
+
 NUMBER_RE = re.compile(
     r"[-+]?\s*\$?\s*(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)\s*%?"
 )
@@ -67,6 +125,8 @@ def extract_answer(text):
     """Apply the shared deterministic answer extraction rule."""
     if not isinstance(text, str):
         return None
+    if ANSWER_MODE == "math":
+        return _MATH_EQUIV.extract_final_answer(text)
     marker = "Answer:"
     marker_at = text.rfind(marker)
     if marker_at >= 0:
@@ -79,13 +139,16 @@ def extract_answer(text):
 
 
 def majority_vote(answers):
-    """Choose the most frequent answer, breaking ties by first occurrence."""
+    """Choose the most frequent answer, breaking ties by first occurrence.
+    Math mode groups by equivalence class but returns the original string of
+    the first voter in the winning class."""
     if not answers:
         return None
-    counts = collections.Counter(answers)
+    keyed = [(vote_key(answer), answer) for answer in answers]
+    counts = collections.Counter(key for key, _ in keyed)
     winning_count = max(counts.values())
-    for answer in answers:
-        if counts[answer] == winning_count:
+    for key, answer in keyed:
+        if counts[key] == winning_count:
             return answer
     return None
 
@@ -130,13 +193,20 @@ def load_items(path, offset, limit):
                     )
             if row["id"] in seen_ids:
                 raise ValueError("duplicate item id {!r} in {}".format(row["id"], path))
-            normalized_gold = normalize_number(row["gold"])
-            if normalized_gold is None:
-                raise ValueError(
-                    "{} line {} has non-numeric gold {!r}".format(
-                        path, line_number, row["gold"]
+            if ANSWER_MODE == "math":
+                normalized_gold = row["gold"].strip()
+                if not normalized_gold:
+                    raise ValueError(
+                        "{} line {} has empty gold".format(path, line_number)
                     )
-                )
+            else:
+                normalized_gold = normalize_number(row["gold"])
+                if normalized_gold is None:
+                    raise ValueError(
+                        "{} line {} has non-numeric gold {!r}".format(
+                            path, line_number, row["gold"]
+                        )
+                    )
             seen_ids.add(row["id"])
             items.append(
                 {
@@ -155,7 +225,7 @@ def load_items(path, offset, limit):
 
 
 def prompt_messages(item):
-    return [{"role": "user", "content": item["prompt"] + ANSWER_SUFFIX}]
+    return [{"role": "user", "content": item["prompt"] + answer_suffix()}]
 
 
 def item_seed(base_seed, item):
@@ -203,7 +273,7 @@ def large_greedy_body(args, item, base_seed):
 
 def large_score_body(item, candidate):
     return {
-        "text": item["prompt"] + ANSWER_SUFFIX + "\nAnswer: " + candidate,
+        "text": item["prompt"] + answer_suffix() + "\nAnswer: " + candidate,
         "sampling_params": {"max_new_tokens": 0, "temperature": 0},
         "return_logprob": True,
         "logprob_start_len": 0,
@@ -778,7 +848,7 @@ def common_record(
         "mode": mode,
         "seed": base_seed,
         "item_index": item["item_index"],
-        "correct": not errors and answer == item["normalized_gold"],
+        "correct": not errors and answers_match(answer, item["normalized_gold"]),
         "extracted": answer,
         "gold": item["gold"],
         "small_tokens": small_tokens,
@@ -812,7 +882,7 @@ def run_cascade_item(args, item, base_seed):
     if request_error is None and not branch_report_valid:
         add_error(errors, "small:invalid_branch_answers")
 
-    leader_matches_winner = branch_leader is not None and branch_leader == winner_answer
+    leader_matches_winner = branch_leader is not None and answers_match(branch_leader, winner_answer)
     small_response_valid = not errors
     confident, gate_p, no_votes = confidence_decision(
         args,
@@ -888,7 +958,7 @@ def run_cascade_score_item(args, item, base_seed):
     if request_error is None and not branch_report_valid:
         add_error(errors, "small:invalid_branch_answers")
 
-    leader_matches_winner = branch_leader is not None and branch_leader == winner_answer
+    leader_matches_winner = branch_leader is not None and answers_match(branch_leader, winner_answer)
     small_response_valid = not errors
     confident, gate_p, no_votes = confidence_decision(
         args,
@@ -1531,7 +1601,8 @@ def run_benchmark(args, items, seeds):
             "large_cost": args.large_cost,
             "timeout": args.timeout,
             "concurrency": args.concurrency,
-            "answer_suffix": ANSWER_SUFFIX,
+            "answer_mode": args.answer_mode,
+            "answer_suffix": answer_suffix(),
             "out_jsonl": os.path.abspath(args.out_jsonl),
         },
         "summaries": summaries,
@@ -1641,6 +1712,7 @@ def compare_config_mismatches(documents):
         "large_cost",
         "timeout",
         "concurrency",
+        "answer_mode",
         "answer_suffix",
     )
     first = configs[0]
@@ -1894,6 +1966,12 @@ def build_parser():
     parser.add_argument("--large-url", default="http://127.0.0.1:30001")
     parser.add_argument("--branches", type=int, default=8)
     parser.add_argument("--agree-threshold", type=int, default=6)
+    parser.add_argument(
+        "--answer-mode",
+        choices=("numeric", "math"),
+        default="numeric",
+        help="math routes extraction/equivalence through bench/tasks/math_equiv.py",
+    )
     parser.add_argument("--gate-model", help="learned escalation gate model JSON")
     parser.add_argument("--gate-threshold", type=float, default=0.75)
     parser.add_argument(
@@ -2011,6 +2089,12 @@ def main():
         return 0
 
     validate_measurement_args(parser, args)
+    try:
+        set_answer_mode(args.answer_mode)
+    except (OSError, AttributeError, FileNotFoundError) as exc:
+        parser.error(
+            "--answer-mode math requires bench/tasks/math_equiv.py: {}".format(exc)
+        )
     args.gate_model_data = None
     args.gate_model_config = None
     if args.gate_model:
