@@ -252,28 +252,12 @@ class OpenAIServingTree(OpenAIServingBase):
 
     @staticmethod
     def _extract_answer(text: str) -> Optional[str]:
-        """Final-answer extraction: prefer '#### <number>', else the last
-        number in the text. Mirrors autotree-core answers.py."""
-        import re
+        """Final-answer extraction, shared with the scheduler runtime so the
+        wire-visible branch_answers and the engine-side votes key identically
+        (boxed, then '#### N', then the Answer: line, then last number)."""
+        from sglang.srt.tree.answers import extract_answer_text
 
-        marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
-        raw = marked[-1] if marked else None
-        if raw is None:
-            # Instructed answer format ("Answer: <number>") beats the bare
-            # last-number fallback, which trailing units or prices corrupt.
-            answered = re.findall(r"[Aa]nswer\s*:\s*\$?\s*([-+]?[\d.,]+)", text)
-            raw = answered[-1] if answered else None
-        if raw is None:
-            numbers = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
-            raw = numbers[-1] if numbers else None
-        if raw is None:
-            return None
-        raw = raw.replace(",", "").rstrip(".")
-        try:
-            value = float(raw)
-            return str(int(value)) if value == int(value) else str(value)
-        except ValueError:
-            return None
+        return extract_answer_text(text)
 
     def _self_consistency_vote(
         self, branches: dict, branch_texts: dict

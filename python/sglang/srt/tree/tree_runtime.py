@@ -688,8 +688,6 @@ class SchedulerTreeRuntime:
         tokenizer = getattr(self.scheduler, "tokenizer", None)
         if tokenizer is None or branch.req is None:
             return None
-        import re
-
         ids = list(branch.req.output_ids)
         eos = getattr(tokenizer, "eos_token_id", None)
         if branch.branch_id == 0:
@@ -707,28 +705,10 @@ class SchedulerTreeRuntime:
         except Exception:
             branch.final_answer = ""
             return None
-        marked = re.findall(r"####\s*([-+]?[\d.,]+)", text)
-        raw = marked[-1] if marked else None
-        if raw is None:
-            # Instructed answer format ("Answer: <number>") beats the bare
-            # last-number fallback: trailing numbers after the answer line
-            # (units, prices) would otherwise corrupt the vote.
-            answered = re.findall(r"[Aa]nswer\s*:\s*\$?\s*([-+]?[\d.,]+)", text)
-            raw = answered[-1] if answered else None
-        if raw is None:
-            nums = re.findall(r"[-+]?\d[\d,]*\.?\d*", text)
-            raw = nums[-1] if nums else None
-        if raw is None:
-            branch.final_answer = ""
-            return None
-        raw = raw.replace(",", "").rstrip(".")
-        try:
-            value = float(raw)
-            answer = str(int(value)) if value == int(value) else str(value)
-        except ValueError:
-            branch.final_answer = ""
-            return None
-        branch.final_answer = answer
+        from sglang.srt.tree.answers import extract_answer_text
+
+        answer = extract_answer_text(text)
+        branch.final_answer = answer or ""
         return answer
 
     def _maybe_majority_lock(self, run: _TreeRun) -> None:
