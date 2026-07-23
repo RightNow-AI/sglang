@@ -92,3 +92,13 @@ least 1.5 with accuracy delta greater than -1.0 point is "pruning wins".
 Ratios from 0.9 inclusive to 1.5 exclusive are "marginal". All other cases are
 "no win". Comparison stops if the recorded run configs or aggregate item
 counts differ.
+
+## Publication figures
+
+Render pooled multi-seed results with per-seed accuracy ranges:
+
+    python3 bench/pruning/plot_pareto.py --summaries bench/pruning/tree.json bench/pruning/bon.json --label bench/pruning/tree.json="AutoTree pruning" --label bench/pruning/bon.json="Sequential best-of-n"
+
+The command writes `pareto` and `tokens_per_correct` in PDF, SVG, and PNG
+formats under `bench/pruning/figures` by default. Use `--demo` for a complete
+synthetic-data rendering check without benchmark traffic.
