@@ -22,7 +22,7 @@ ANSWER_SUFFIX = (
 NUMBER_RE = re.compile(
     r"[-+]?\s*\$?\s*(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)\s*%?"
 )
-MODES = ("cascade", "large_bo8", "large_greedy")
+MODES = ("cascade", "large_bo8", "large_greedy", "cascade_score")
 
 
 def normalize_number(value):
@@ -187,6 +187,15 @@ def large_greedy_body(args, item, base_seed):
     }
 
 
+def large_score_body(item, candidate):
+    return {
+        "text": item["prompt"] + ANSWER_SUFFIX + "\nAnswer: " + candidate,
+        "sampling_params": {"max_new_tokens": 0, "temperature": 0},
+        "return_logprob": True,
+        "logprob_start_len": 0,
+    }
+
+
 def compact_error(value, limit=500):
     text = re.sub(r"\s+", " ", str(value)).strip()
     if len(text) > limit:
@@ -282,6 +291,15 @@ def nonnegative_number(value):
     return number
 
 
+def finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return number
+
+
 def completion_content(payload):
     if not isinstance(payload, dict):
         return None, "missing_response_object"
@@ -361,6 +379,93 @@ def tree_winner_branch_id(payload):
         return None
     value = payload["tree"].get("winner_branch_id")
     return None if value is None else str(value)
+
+
+def ranked_branch_candidates(payload, branch_answers):
+    counts = collections.Counter(
+        answer for answer in branch_answers.values() if answer is not None
+    )
+    best_scores = {}
+    tree = payload.get("tree") if isinstance(payload, dict) else None
+    final_scores = tree.get("final_scores") if isinstance(tree, dict) else None
+    if isinstance(final_scores, dict):
+        for branch_id, answer in branch_answers.items():
+            if answer is None:
+                continue
+            score = finite_number(final_scores.get(branch_id))
+            if score is None:
+                continue
+            if answer not in best_scores or score > best_scores[answer]:
+                best_scores[answer] = score
+    ranked = sorted(
+        counts,
+        key=lambda answer: (
+            -counts[answer],
+            0 if answer in best_scores else 1,
+            -best_scores.get(answer, 0.0),
+            answer,
+        ),
+    )
+    return ranked[:2]
+
+
+def estimated_candidate_token_count(candidate):
+    return max(1, (len(candidate) + 3) // 4)
+
+
+def run_native_score_request(url, body, candidate, timeout):
+    payload, request_error = post_json(url, body, timeout)
+    meta_info = payload.get("meta_info") if isinstance(payload, dict) else None
+    raw_logprobs = (
+        meta_info.get("input_token_logprobs")
+        if isinstance(meta_info, dict)
+        else None
+    )
+    raw_logprob_length = len(raw_logprobs) if isinstance(raw_logprobs, list) else 0
+    prompt_tokens = (
+        nonnegative_int(meta_info.get("prompt_tokens"))
+        if isinstance(meta_info, dict)
+        else None
+    )
+    prompt_token_source = "meta_info.prompt_tokens"
+    if prompt_tokens is None and isinstance(raw_logprobs, list):
+        prompt_tokens = raw_logprob_length
+        prompt_token_source = "input_token_logprobs_length"
+    if prompt_tokens is None:
+        prompt_tokens = 0
+        prompt_token_source = "unavailable"
+
+    errors = []
+    add_error(errors, request_error)
+    if request_error is None and not isinstance(meta_info, dict):
+        add_error(errors, "missing_meta_info")
+    if not isinstance(raw_logprobs, list) or not raw_logprobs:
+        add_error(errors, "missing_input_token_logprobs")
+
+    estimated_tokens = estimated_candidate_token_count(candidate)
+    values = []
+    if isinstance(raw_logprobs, list) and raw_logprobs:
+        if len(raw_logprobs) < estimated_tokens:
+            add_error(errors, "candidate_span_exceeds_logprob_array")
+        else:
+            for entry in raw_logprobs[-estimated_tokens:]:
+                if not isinstance(entry, (list, tuple)) or not entry:
+                    add_error(errors, "malformed_input_token_logprob")
+                    break
+                value = finite_number(entry[0])
+                if value is None:
+                    add_error(errors, "non_numeric_input_token_logprob")
+                    break
+                values.append(value)
+    score = sum(values) / len(values) if not errors and values else None
+    return {
+        "score": score,
+        "prompt_tokens": prompt_tokens,
+        "prompt_token_source": prompt_token_source,
+        "raw_logprob_length": raw_logprob_length,
+        "estimated_candidate_tokens": estimated_tokens,
+        "errors": errors,
+    }
 
 
 def add_error(errors, error):
@@ -498,6 +603,138 @@ def run_cascade_item(args, item, base_seed):
     return record
 
 
+def run_cascade_score_item(args, item, base_seed):
+    started = time.perf_counter()
+    small_url = args.small_url.rstrip("/") + "/v1/tree/completions"
+    payload, request_error = post_json(
+        small_url, small_tree_body(args, item, base_seed), args.timeout
+    )
+    small_tokens, token_report_valid = tree_token_report(payload)
+    content, content_error = completion_content(payload)
+    winner_answer = extract_answer(content)
+    (
+        branch_answers,
+        branch_leader,
+        leader_count,
+        voter_count,
+        branch_report_valid,
+    ) = branch_answer_report(payload)
+    errors = prefixed_errors(
+        "small",
+        request_errors(request_error, content_error, small_tokens, token_report_valid),
+    )
+    if request_error is None and not branch_report_valid:
+        add_error(errors, "small:invalid_branch_answers")
+
+    small_response_valid = not errors
+    confident = (
+        small_response_valid
+        and leader_count >= args.agree_threshold
+        and voter_count >= 4
+    )
+    escalated = not confident
+    candidates = ranked_branch_candidates(payload, branch_answers)
+    scored_candidates = []
+    span_scores = {}
+    raw_logprob_lengths = {}
+    estimated_candidate_tokens = {}
+    scoring_prompt_tokens = {}
+    scoring_prompt_token_sources = {}
+    scoring_errors = []
+    large_prefill_tokens = 0
+    large_tokens = 0
+    answer = winner_answer
+    chosen_by = "vote"
+
+    if escalated:
+        if len(candidates) == 2:
+            score_url = args.large_url.rstrip("/") + "/generate"
+            for candidate in candidates:
+                score_result = run_native_score_request(
+                    score_url,
+                    large_score_body(item, candidate),
+                    candidate,
+                    args.timeout,
+                )
+                scored_candidates.append(candidate)
+                span_scores[candidate] = score_result["score"]
+                raw_logprob_lengths[candidate] = score_result["raw_logprob_length"]
+                estimated_candidate_tokens[candidate] = score_result[
+                    "estimated_candidate_tokens"
+                ]
+                scoring_prompt_tokens[candidate] = score_result["prompt_tokens"]
+                scoring_prompt_token_sources[candidate] = score_result[
+                    "prompt_token_source"
+                ]
+                large_prefill_tokens += score_result["prompt_tokens"]
+                for error in score_result["errors"]:
+                    add_error(
+                        scoring_errors,
+                        "candidate_{}:{}".format(candidate, error),
+                    )
+        else:
+            add_error(
+                scoring_errors,
+                "selection:need_two_distinct_candidates_got_{}".format(
+                    len(candidates)
+                ),
+            )
+
+        scores_available = len(candidates) == 2 and all(
+            span_scores.get(candidate) is not None for candidate in candidates
+        )
+        if scores_available:
+            answer = max(candidates, key=lambda candidate: span_scores[candidate])
+            chosen_by = "score"
+        else:
+            large_url = args.large_url.rstrip("/") + "/v1/chat/completions"
+            large = run_chat_request(
+                large_url, large_greedy_body(args, item, base_seed), args.timeout
+            )
+            large_tokens = large["tokens"]
+            answer = large["answer"]
+            chosen_by = "fallback"
+            for error in prefixed_errors("large", large["errors"]):
+                add_error(errors, error)
+
+    record = common_record(
+        args,
+        "cascade_score",
+        item,
+        base_seed,
+        started,
+        answer,
+        small_tokens,
+        large_tokens,
+        errors,
+    )
+    record["large_prefill_tokens"] = large_prefill_tokens
+    record["total_cost_units"] += large_prefill_tokens * args.large_prefill_cost
+    record.update(
+        {
+            "escalated": escalated,
+            "small_winner_answer": winner_answer,
+            "branch_answers": branch_answers,
+            "branch_answer_leader": branch_leader,
+            "leader_count": leader_count,
+            "voter_count": voter_count,
+            "leader_matches_winner": (
+                branch_leader is not None and branch_leader == winner_answer
+            ),
+            "winner_branch_id": tree_winner_branch_id(payload),
+            "scored_candidates": scored_candidates,
+            "span_scores": span_scores,
+            "raw_logprob_lengths": raw_logprob_lengths,
+            "estimated_candidate_tokens": estimated_candidate_tokens,
+            "scoring_prompt_tokens": scoring_prompt_tokens,
+            "scoring_prompt_token_sources": scoring_prompt_token_sources,
+            "scoring_errors": scoring_errors,
+            "chosen_by": chosen_by,
+        }
+    )
+    return record
+
+
 def run_large_bo8_item(args, item, base_seed):
     started = time.perf_counter()
     url = args.large_url.rstrip("/") + "/v1/chat/completions"
@@ -562,6 +799,8 @@ def run_large_greedy_item(args, item, base_seed):
 def run_mode_item(args, item, base_seed):
     if args.mode == "cascade":
         return run_cascade_item(args, item, base_seed)
+    if args.mode == "cascade_score":
+        return run_cascade_score_item(args, item, base_seed)
     if args.mode == "large_bo8":
         return run_large_bo8_item(args, item, base_seed)
     return run_large_greedy_item(args, item, base_seed)
@@ -592,6 +831,28 @@ def error_record(args, item, base_seed, exc):
                 "voter_count": 0,
                 "leader_matches_winner": False,
                 "winner_branch_id": None,
+            }
+        )
+    elif args.mode == "cascade_score":
+        record.update(
+            {
+                "large_prefill_tokens": 0,
+                "escalated": None,
+                "small_winner_answer": None,
+                "branch_answers": {},
+                "branch_answer_leader": None,
+                "leader_count": 0,
+                "voter_count": 0,
+                "leader_matches_winner": False,
+                "winner_branch_id": None,
+                "scored_candidates": [],
+                "span_scores": {},
+                "raw_logprob_lengths": {},
+                "estimated_candidate_tokens": {},
+                "scoring_prompt_tokens": {},
+                "scoring_prompt_token_sources": {},
+                "scoring_errors": ["internal_error:scoring_not_completed"],
+                "chosen_by": "fallback",
             }
         )
     elif args.mode == "large_bo8":
@@ -647,7 +908,7 @@ def valid_resume_record(record):
         return False
     if record.get("error") is not None and not isinstance(record.get("error"), str):
         return False
-    if key[0] == "cascade":
+    if key[0] in ("cascade", "cascade_score"):
         cascade_fields = (
             "escalated",
             "small_winner_answer",
@@ -679,6 +940,36 @@ def valid_resume_record(record):
             return False
         if not isinstance(record.get("leader_matches_winner"), bool):
             return False
+    if key[0] == "cascade_score":
+        cascade_score_fields = (
+            "large_prefill_tokens",
+            "scored_candidates",
+            "span_scores",
+            "raw_logprob_lengths",
+            "estimated_candidate_tokens",
+            "scoring_prompt_tokens",
+            "scoring_prompt_token_sources",
+            "scoring_errors",
+            "chosen_by",
+        )
+        if any(field not in record for field in cascade_score_fields):
+            return False
+        if (
+            nonnegative_int(record.get("large_prefill_tokens")) is None
+            or not isinstance(record.get("scored_candidates"), list)
+            or not isinstance(record.get("scoring_errors"), list)
+            or record.get("chosen_by") not in ("vote", "score", "fallback")
+        ):
+            return False
+        for field in (
+            "span_scores",
+            "raw_logprob_lengths",
+            "estimated_candidate_tokens",
+            "scoring_prompt_tokens",
+            "scoring_prompt_token_sources",
+        ):
+            if not isinstance(record.get(field), dict):
+                return False
     if key[0] == "large_bo8" and not isinstance(record.get("sample_answers"), list):
         return False
     return True
@@ -748,7 +1039,15 @@ def summarize(args, seed, records):
     total_large_tokens = sum(
         nonnegative_int(record.get("large_tokens")) or 0 for record in records
     )
-    total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+    total_large_prefill_tokens = sum(
+        nonnegative_int(record.get("large_prefill_tokens")) or 0
+        for record in records
+    )
+    if args.mode == "cascade_score":
+        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+        total_cost_units += total_large_prefill_tokens * args.large_prefill_cost
+    else:
+        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
     wall_times = [nonnegative_number(record.get("wall_s")) or 0.0 for record in records]
     summary = {
         "mode": args.mode,
@@ -763,7 +1062,9 @@ def summarize(args, seed, records):
         "mean_wall_s": statistics.mean(wall_times) if wall_times else 0.0,
         "error_count": sum(bool(record.get("error")) for record in records),
     }
-    if args.mode == "cascade":
+    if args.mode == "cascade_score":
+        summary["total_large_prefill_tokens"] = total_large_prefill_tokens
+    if args.mode in ("cascade", "cascade_score"):
         observed = [
             record["escalated"]
             for record in records
@@ -809,6 +1110,12 @@ def print_summary_table(summaries):
                 errors=row["error_count"],
             )
         )
+        if row["mode"] == "cascade_score":
+            print(
+                "cascade_score_seed_{}_large_prefill_tokens: {}".format(
+                    row["seed"], row["total_large_prefill_tokens"]
+                )
+            )
 
 
 def write_json_atomic(path, value):
@@ -945,6 +1252,8 @@ def run_benchmark(args, items, seeds):
         },
         "summaries": summaries,
     }
+    if args.mode == "cascade_score":
+        output["config"]["large_prefill_cost"] = args.large_prefill_cost
     write_json_atomic(args.out, output)
     print_summary_table(summaries)
     print("summary_json: {}".format(os.path.abspath(args.out)))
@@ -996,7 +1305,12 @@ def aggregate_summaries(rows, mode):
         "total_cost_units": total_cost_units,
         "cost_per_correct": total_cost_units / max(correct_count, 1),
     }
-    if mode == "cascade":
+    if mode == "cascade_score":
+        aggregate["total_large_prefill_tokens"] = sum(
+            nonnegative_int(row.get("total_large_prefill_tokens")) or 0
+            for row in rows
+        )
+    if mode in ("cascade", "cascade_score"):
         escalated_count = sum(
             nonnegative_int(row.get("escalated_count")) or 0 for row in rows
         )
@@ -1056,17 +1370,21 @@ def format_ratio(value):
     return "n/a" if value is None else "{:.6f}".format(value)
 
 
-def print_comparison(mode, baseline, cascade):
-    accuracy_delta_points = (cascade["accuracy"] - baseline["accuracy"]) * 100.0
-    cost_ratio = ratio(baseline["cost_per_correct"], cascade["cost_per_correct"])
+def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
+    accuracy_delta_points = (
+        tree_summary["accuracy"] - baseline["accuracy"]
+    ) * 100.0
+    cost_ratio = ratio(
+        baseline["cost_per_correct"], tree_summary["cost_per_correct"]
+    )
     print(
         "{}_accuracy: {:.6%} ({}/{})".format(
             mode, baseline["accuracy"], baseline["correct_count"], baseline["items"]
         )
     )
     print(
-        "accuracy_delta_cascade_minus_{}: {:+.6f} pt".format(
-            mode, accuracy_delta_points
+        "accuracy_delta_{}_minus_{}: {:+.6f} pt".format(
+            tree_mode, mode, accuracy_delta_points
         )
     )
     print("{}_total_small_tokens: {}".format(mode, baseline["total_small_tokens"]))
@@ -1074,38 +1392,66 @@ def print_comparison(mode, baseline, cascade):
     print("{}_total_cost_units: {:.6f}".format(mode, baseline["total_cost_units"]))
     print("{}_cost_per_correct: {:.6f}".format(mode, baseline["cost_per_correct"]))
     print(
-        "cost_per_correct_ratio_{}_over_cascade: {}".format(
-            mode, format_ratio(cost_ratio)
+        "cost_per_correct_ratio_{}_over_{}: {}".format(
+            mode, tree_mode, format_ratio(cost_ratio)
         )
     )
     if cost_ratio is None:
         conclusion = "cost-per-correct ratio is unavailable"
     elif cost_ratio > 1.0:
-        conclusion = "cascade is cheaper per correct in this run"
+        conclusion = "{} is cheaper per correct in this run".format(tree_mode)
     elif cost_ratio < 1.0:
-        conclusion = "cascade is not cheaper per correct in this run"
+        conclusion = "{} is not cheaper per correct in this run".format(tree_mode)
     else:
         conclusion = "cost per correct is equal in this run"
     print(
-        "verdict_{}: {}; baseline/cascade ratio {}, cascade cost/correct "
-        "{:.6f}, baseline cost/correct {:.6f}, cascade accuracy delta "
-        "{:+.6f} pt, cascade escalation rate {:.6%}".format(
+        "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
+        "baseline cost/correct {:.6f}, {} accuracy delta {:+.6f} pt, {} "
+        "escalation rate {:.6%}".format(
             mode,
             conclusion,
+            tree_mode,
             format_ratio(cost_ratio),
-            cascade["cost_per_correct"],
+            tree_mode,
+            tree_summary["cost_per_correct"],
             baseline["cost_per_correct"],
+            tree_mode,
             accuracy_delta_points,
-            cascade["escalation_rate"],
+            tree_mode,
+            tree_summary["escalation_rate"],
         )
     )
 
 
 def compare_summaries(paths):
-    expected_modes = ["cascade", "large_bo8"]
-    if len(paths) == 3:
-        expected_modes.append("large_greedy")
     documents = [load_json(path) for path in paths]
+    first_modes = {
+        row.get("mode")
+        for row in summary_rows(documents[0])
+        if row.get("mode") is not None
+    }
+    if len(first_modes) != 1:
+        raise ValueError("first summary JSON must contain exactly one mode")
+    tree_mode = next(iter(first_modes))
+    if tree_mode not in ("cascade", "cascade_score"):
+        raise ValueError("first summary mode must be 'cascade' or 'cascade_score'")
+    expected_modes = [tree_mode]
+    for document in documents[1:]:
+        baseline_modes = {
+            row.get("mode")
+            for row in summary_rows(document)
+            if row.get("mode") is not None
+        }
+        if len(baseline_modes) != 1:
+            raise ValueError("baseline summary JSON must contain exactly one mode")
+        baseline_mode = next(iter(baseline_modes))
+        if baseline_mode not in ("large_bo8", "large_greedy"):
+            raise ValueError(
+                "baseline summary mode must be 'large_bo8' or 'large_greedy'"
+            )
+        if baseline_mode in expected_modes:
+            raise ValueError("duplicate baseline mode {!r}".format(baseline_mode))
+        expected_modes.append(baseline_mode)
     mismatches = compare_config_mismatches(documents)
     if mismatches:
         raise ValueError("summary configs differ for: {}".format(", ".join(mismatches)))
@@ -1114,27 +1460,59 @@ def compare_summaries(paths):
         aggregates[mode] = aggregate_summaries(
             rows_for_mode(document, mode, path), mode
         )
-    cascade = aggregates["cascade"]
+    tree_summary = aggregates[tree_mode]
     for mode in expected_modes[1:]:
-        if aggregates[mode]["items"] != cascade["items"]:
+        if aggregates[mode]["items"] != tree_summary["items"]:
             raise ValueError(
-                "cascade and {} item counts differ: {} versus {}".format(
-                    mode, cascade["items"], aggregates[mode]["items"]
+                "{} and {} item counts differ: {} versus {}".format(
+                    tree_mode,
+                    mode,
+                    tree_summary["items"],
+                    aggregates[mode]["items"],
                 )
             )
 
     print(
-        "cascade_accuracy: {:.6%} ({}/{})".format(
-            cascade["accuracy"], cascade["correct_count"], cascade["items"]
+        "{}_accuracy: {:.6%} ({}/{})".format(
+            tree_mode,
+            tree_summary["accuracy"],
+            tree_summary["correct_count"],
+            tree_summary["items"],
         )
     )
-    print("cascade_total_small_tokens: {}".format(cascade["total_small_tokens"]))
-    print("cascade_total_large_tokens: {}".format(cascade["total_large_tokens"]))
-    print("cascade_total_cost_units: {:.6f}".format(cascade["total_cost_units"]))
-    print("cascade_cost_per_correct: {:.6f}".format(cascade["cost_per_correct"]))
-    print("cascade_escalation_rate: {:.6%}".format(cascade["escalation_rate"]))
+    print(
+        "{}_total_small_tokens: {}".format(
+            tree_mode, tree_summary["total_small_tokens"]
+        )
+    )
+    print(
+        "{}_total_large_tokens: {}".format(
+            tree_mode, tree_summary["total_large_tokens"]
+        )
+    )
+    if tree_mode == "cascade_score":
+        print(
+            "cascade_score_total_large_prefill_tokens: {}".format(
+                tree_summary["total_large_prefill_tokens"]
+            )
+        )
+    print(
+        "{}_total_cost_units: {:.6f}".format(
+            tree_mode, tree_summary["total_cost_units"]
+        )
+    )
+    print(
+        "{}_cost_per_correct: {:.6f}".format(
+            tree_mode, tree_summary["cost_per_correct"]
+        )
+    )
+    print(
+        "{}_escalation_rate: {:.6%}".format(
+            tree_mode, tree_summary["escalation_rate"]
+        )
+    )
     for mode in expected_modes[1:]:
-        print_comparison(mode, aggregates[mode], cascade)
+        print_comparison(mode, aggregates[mode], tree_summary, tree_mode)
 
 
 def print_dry_run(args, item, seed):
@@ -1150,6 +1528,24 @@ def print_dry_run(args, item, seed):
                 "body": small_tree_body(args, item, seed),
             },
             "large_fallback_if_needed": {
+                "url": large_base + "/v1/chat/completions",
+                "body": large_greedy_body(args, item, seed),
+            },
+        },
+        "cascade_score": {
+            "small_tree": {
+                "url": small_base + "/v1/tree/completions",
+                "body": small_tree_body(args, item, seed),
+            },
+            "large_scoring_if_needed": [
+                {
+                    "candidate": candidate,
+                    "url": large_base + "/generate",
+                    "body": large_score_body(item, candidate),
+                }
+                for candidate in ("<candidate_1>", "<candidate_2>")
+            ],
+            "large_fallback_if_scoring_fails": {
                 "url": large_base + "/v1/chat/completions",
                 "body": large_greedy_body(args, item, seed),
             },
@@ -1189,6 +1585,12 @@ def build_parser():
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--small-cost", type=float, default=1.0)
     parser.add_argument("--large-cost", type=float, default=10.0)
+    parser.add_argument(
+        "--large-prefill-cost",
+        type=float,
+        default=2.0,
+        help="large-model prefill cost units per token for cascade_score",
+    )
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--seeds", default="0")
     parser.add_argument("--concurrency", type=int, default=4)
@@ -1200,12 +1602,15 @@ def build_parser():
         "--compare",
         nargs="+",
         metavar="SUMMARY_JSON",
-        help=("compare cascade JSON, large_bo8 JSON, and optionally large_greedy JSON"),
+        help=(
+            "compare cascade or cascade_score JSON with one or both of "
+            "large_bo8 and large_greedy JSON"
+        ),
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="print all three modes' request bodies for the first selected item",
+        help="print all four modes' request bodies for the first selected item",
     )
     return parser
 
@@ -1213,8 +1618,10 @@ def build_parser():
 def validate_measurement_args(parser, args):
     if not args.data:
         parser.error("--data is required unless --compare is used")
-    if (args.mode == "cascade" or args.dry_run) and not args.small_model:
-        parser.error("--small-model is required for cascade and --dry-run")
+    if (args.mode in ("cascade", "cascade_score") or args.dry_run) and not args.small_model:
+        parser.error(
+            "--small-model is required for cascade, cascade_score, and --dry-run"
+        )
     if not args.large_model:
         parser.error("--large-model is required unless --compare is used")
     if args.branches <= 0 or args.branches > 64:
@@ -1229,6 +1636,8 @@ def validate_measurement_args(parser, args):
         parser.error("--small-cost must be nonnegative")
     if args.large_cost < 0:
         parser.error("--large-cost must be nonnegative")
+    if args.large_prefill_cost < 0:
+        parser.error("--large-prefill-cost must be nonnegative")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if args.concurrency <= 0:
