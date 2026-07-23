@@ -92,3 +92,26 @@ least 1.5 with accuracy delta greater than -1.0 point is "pruning wins".
 Ratios from 0.9 inclusive to 1.5 exclusive are "marginal". All other cases are
 "no win". Comparison stops if the recorded run configs or aggregate item
 counts differ.
+
+## 2026-07-23 parallel best-of-n addendum
+
+The best-of-n path remains sequential by default. Passing --bon-parallel fires
+all branch requests for an item concurrently. Seeds remain base seed + absolute
+item index * 1000 + sample index. Results are consumed in sample-index order,
+so majority-vote ties and per-sample error ordering do not depend on completion
+order. Generated tokens remain the sum of usage.completion_tokens across every
+sample. The item wall time therefore measures parallel latency when the flag is
+enabled.
+
+Each newly written item record and the summary config include bon_parallel as a
+boolean. Dry-run output includes the same field. Use a fresh JSONL output path
+when changing bon_parallel because resume keys remain (mode, seed, id).
+
+Comparison no longer treats concurrency as a comparability key because it is
+measurement infrastructure rather than model economics. All other existing
+comparability keys remain. When the best-of-n summary records bon_parallel as
+true, comparison prints a NOTE that bon wall times are parallel.
+
+Run the strong latency baseline with:
+
+    python3 bench/pruning/measure_pruning_economics.py --mode bon --bon-parallel --data "$DATA" --model "$MODEL" --base-url http://127.0.0.1:30000 --seeds "0,1,2" --branches 8 --max-tokens 512 --temperature 0.7 --timeout 300 --concurrency 4 --out-jsonl bench/pruning/bon_parallel_items.jsonl --out bench/pruning/bon_parallel.json
