@@ -3,6 +3,7 @@
 
 import argparse
 import collections
+import concurrent.futures
 import json
 import os
 import queue
@@ -323,6 +324,7 @@ def run_tree_item(args, item, base_seed):
             add_error(errors, "invalid_token_report")
     extracted = extract_answer(content)
     return {
+        "bon_parallel": args.bon_parallel,
         "id": item["id"],
         "mode": "tree",
         "seed": base_seed,
@@ -344,10 +346,27 @@ def run_bon_item(args, item, base_seed):
     answers = []
     generated_tokens = 0
     errors = []
+    sample_results = None
+    if args.bon_parallel:
+
+        def request_sample(sample_index):
+            return post_json(
+                url, bon_body(args, item, base_seed, sample_index), args.timeout
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=args.branches
+        ) as executor:
+            sample_results = list(
+                executor.map(request_sample, range(args.branches))
+            )
     for sample_index in range(args.branches):
-        payload, request_error = post_json(
-            url, bon_body(args, item, base_seed, sample_index), args.timeout
-        )
+        if sample_results is None:
+            payload, request_error = post_json(
+                url, bon_body(args, item, base_seed, sample_index), args.timeout
+            )
+        else:
+            payload, request_error = sample_results[sample_index]
         sample_tokens, token_report_valid = bon_token_report(payload)
         generated_tokens += sample_tokens
         content, content_error = completion_content(payload)
@@ -368,6 +387,7 @@ def run_bon_item(args, item, base_seed):
                 )
     extracted = majority_vote(answers)
     return {
+        "bon_parallel": args.bon_parallel,
         "id": item["id"],
         "mode": "bon",
         "seed": base_seed,
@@ -381,8 +401,9 @@ def run_bon_item(args, item, base_seed):
     }
 
 
-def error_record(mode, item, base_seed, exc):
+def error_record(mode, item, base_seed, bon_parallel, exc):
     record = {
+        "bon_parallel": bon_parallel,
         "id": item["id"],
         "mode": mode,
         "seed": base_seed,
@@ -647,7 +668,9 @@ def run_benchmark(args, items, seeds):
                             else:
                                 record = run_bon_item(args, item, seed)
                         except Exception as exc:
-                            record = error_record(args.mode, item, seed, exc)
+                            record = error_record(
+                                args.mode, item, seed, args.bon_parallel, exc
+                            )
                         key = (args.mode, seed, item["id"])
                         with write_lock:
                             if key in existing or key in records_by_key:
@@ -704,6 +727,7 @@ def run_benchmark(args, items, seeds):
             "temperature": args.temperature,
             "timeout": args.timeout,
             "concurrency": args.concurrency,
+            "bon_parallel": args.bon_parallel,
             "answer_suffix": ANSWER_SUFFIX,
             "out_jsonl": os.path.abspath(args.out_jsonl),
         },
@@ -778,7 +802,6 @@ def compare_config_mismatches(tree_document, bon_document):
         "max_tokens",
         "temperature",
         "timeout",
-        "concurrency",
     )
     return [key for key in keys if tree_config.get(key) != bon_config.get(key)]
 
@@ -814,6 +837,9 @@ def compare_summaries(first_path, second_path):
                 tree["items"], bon["items"]
             )
         )
+    bon_config = bon_document.get("config")
+    if isinstance(bon_config, dict) and bon_config.get("bon_parallel") is True:
+        print("NOTE: bon wall times are parallel.")
     accuracy_delta_points = (tree["accuracy"] - bon["accuracy"]) * 100.0
     token_ratio = ratio(
         bon["total_generated_tokens"], tree["total_generated_tokens"]
@@ -863,6 +889,7 @@ def compare_summaries(first_path, second_path):
 def print_dry_run(args, item, seed):
     base = args.base_url.rstrip("/")
     document = {
+        "bon_parallel": args.bon_parallel,
         "item_id": item["id"],
         "item_index": item["item_index"],
         "tree": {
@@ -898,6 +925,11 @@ def build_parser():
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--seeds", default="0")
     parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument(
+        "--bon-parallel",
+        action="store_true",
+        help="issue best-of-n sample requests concurrently",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--out-jsonl", help="incremental per-item JSONL output")
