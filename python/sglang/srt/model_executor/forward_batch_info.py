@@ -52,6 +52,10 @@ from sglang.srt.model_executor.forward_batch_deepseek_mha_mixin import (
     ForwardBatchDeepSeekMHAMixin,
 )
 from sglang.srt.runtime_context import get_parallel, get_server_args
+from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
+from sglang.srt.tree.profile import incr as _autotree_profile_incr
+from sglang.srt.tree.profile import note_decode_step as _autotree_note_decode_step
+from sglang.srt.tree.profile import span as _autotree_profile_span
 from sglang.srt.utils import (
     is_cuda,
     is_hip,
@@ -75,6 +79,9 @@ if TYPE_CHECKING:
 _skip_attn_backend_init_warned = False
 
 _is_npu = is_npu()
+
+if _AUTOTREE_PROFILE_ENABLED:
+    _autotree_profile_incr("attention.shared_prefix_decode_fires", 0)
 
 
 def _elastic_should_preserve_local_token_counts(
@@ -760,22 +767,54 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             and ret.rids
             and _autotree_os.environ.get("AUTOTREE_SHARED_READ", "1") != "0"
         ):
-            try:
-                from sglang.srt.tree.tree_runtime import get_active as _autotree_get_active
-
-                _autotree_runtime = _autotree_get_active()
-                if _autotree_runtime is not None:
-                    _autotree_groups = {}
-                    for _autotree_rid in ret.rids:
-                        _autotree_group = _autotree_runtime.get_shared_prefix_group(
-                            _autotree_rid
+            if _AUTOTREE_PROFILE_ENABLED:
+                with _autotree_profile_span("forward_batch.shared_prefix_groups"):
+                    try:
+                        from sglang.srt.tree.tree_runtime import (
+                            get_active as _autotree_get_active,
                         )
-                        if _autotree_group is not None:
-                            _autotree_groups[id(_autotree_group)] = _autotree_group
-                    if _autotree_groups:
-                        ret.shared_prefix_groups = list(_autotree_groups.values())
-            except Exception:
-                ret.shared_prefix_groups = None
+
+                        _autotree_runtime = _autotree_get_active()
+                        if _autotree_runtime is not None:
+                            _autotree_groups = {}
+                            for _autotree_rid in ret.rids:
+                                _autotree_group = (
+                                    _autotree_runtime.get_shared_prefix_group(
+                                        _autotree_rid
+                                    )
+                                )
+                                if _autotree_group is not None:
+                                    _autotree_groups[id(_autotree_group)] = (
+                                        _autotree_group
+                                    )
+                            if _autotree_groups:
+                                ret.shared_prefix_groups = list(
+                                    _autotree_groups.values()
+                                )
+                    except Exception:
+                        ret.shared_prefix_groups = None
+            else:
+                try:
+                    from sglang.srt.tree.tree_runtime import (
+                        get_active as _autotree_get_active,
+                    )
+
+                    _autotree_runtime = _autotree_get_active()
+                    if _autotree_runtime is not None:
+                        _autotree_groups = {}
+                        for _autotree_rid in ret.rids:
+                            _autotree_group = _autotree_runtime.get_shared_prefix_group(
+                                _autotree_rid
+                            )
+                            if _autotree_group is not None:
+                                _autotree_groups[id(_autotree_group)] = _autotree_group
+                        if _autotree_groups:
+                            ret.shared_prefix_groups = list(_autotree_groups.values())
+                except Exception:
+                    ret.shared_prefix_groups = None
+
+        if _AUTOTREE_PROFILE_ENABLED and ret.forward_mode.is_decode():
+            _autotree_note_decode_step()
 
         if envs.SGLANG_KV_CANARY_ENABLE_TOKEN_ORACLE.get():
             hashed = _hash_rids_to_tensor(

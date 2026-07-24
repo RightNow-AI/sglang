@@ -32,6 +32,9 @@ from collections import deque
 from typing import Any, Dict, Optional
 
 from sglang.srt.tree import selection
+from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
+from sglang.srt.tree.profile import incr as _autotree_profile_incr
+from sglang.srt.tree.profile import span as _autotree_profile_span
 from sglang.srt.tree.shared_prefix import SharedPrefixGroup
 
 logger = logging.getLogger(__name__)
@@ -747,6 +750,10 @@ class SchedulerTreeRuntime:
         elif eos is not None and eos in ids:
             ids = ids[: ids.index(eos)]
         try:
+            if _AUTOTREE_PROFILE_ENABLED:
+                _autotree_profile_incr(
+                    "tree.extract_branch_answer.tokens_detokenized", len(ids)
+                )
             text = tokenizer.decode(ids, skip_special_tokens=True)
         except Exception:
             branch.final_answer = ""
@@ -1020,6 +1027,36 @@ class SchedulerTreeRuntime:
 
         for target in finish_targets:
             target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
+
+
+if _AUTOTREE_PROFILE_ENABLED:
+    from functools import wraps as _profile_wraps
+
+    def _profile_method(name, method):
+        @_profile_wraps(method)
+        def profiled(*args, **kwargs):
+            with _autotree_profile_span(name):
+                return method(*args, **kwargs)
+
+        return profiled
+
+    for _method_name in (
+        "_account_tokens",
+        "_attach_snapshot",
+        "_extract_branch_answer",
+        "_maybe_value_prune",
+        "_maybe_majority_lock",
+        "_fork_branches",
+        "_finalize",
+    ):
+        setattr(
+            SchedulerTreeRuntime,
+            _method_name,
+            _profile_method(
+                f"tree.{_method_name.removeprefix('_')}",
+                getattr(SchedulerTreeRuntime, _method_name),
+            ),
+        )
 
 
 _ACTIVE: Optional[SchedulerTreeRuntime] = None
