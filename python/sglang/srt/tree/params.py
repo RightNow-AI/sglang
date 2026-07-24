@@ -112,6 +112,8 @@ class TreeSummary:
     branch_answers: Dict[str, Optional[str]] = dataclasses.field(
         default_factory=dict
     )
+    served_from_memo: bool = False
+    memo_key: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

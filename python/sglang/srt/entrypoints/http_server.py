@@ -1694,6 +1694,21 @@ async def openai_v1_tree_completions(
     )
 
 
+@app.get("/v1/tree/memo/stats")
+async def tree_memo_stats(raw_request: Request):
+    """Return verified reasoning memo lookup and savings metrics."""
+    return ORJSONResponse(
+        content=raw_request.app.state.openai_serving_tree.memo_stats()
+    )
+
+
+@app.post("/v1/tree/memo/clear")
+async def tree_memo_clear(raw_request: Request):
+    """Clear verified reasoning memo entries and cumulative metrics."""
+    stats = raw_request.app.state.openai_serving_tree.clear_memo()
+    return ORJSONResponse(content={"cleared": True, **stats})
+
+
 @app.post("/v1/tree/verify", dependencies=[Depends(validate_json_request)])
 async def tree_verify(request: TreeVerifyRequest, raw_request: Request):
     """Score candidate continuations with one prefill-only batch."""
