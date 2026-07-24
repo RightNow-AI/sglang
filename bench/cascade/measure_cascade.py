@@ -88,6 +88,7 @@ MODES = (
     "large_greedy",
     "cascade_score",
     "large_tree",
+    "adaptive_k",
     "spec_tree",
 )
 DEFAULT_SPEC_TREE_SMALL_MODEL = "Qwen/Qwen2.5-7B-Instruct"
@@ -161,6 +162,21 @@ def majority_vote(answers):
     return None
 
 
+def plurality_report(answers):
+    """Return plurality answer and top two counts with first-seen tie breaks."""
+    keyed = [(vote_key(answer), answer) for answer in answers if answer is not None]
+    if not keyed:
+        return None, 0, 0
+    counts = collections.Counter(key for key, _answer in keyed)
+    ranked_counts = sorted(counts.values(), reverse=True)
+    leader_count = ranked_counts[0]
+    runner_up_count = ranked_counts[1] if len(ranked_counts) > 1 else 0
+    for key, answer in keyed:
+        if counts[key] == leader_count:
+            return answer, leader_count, runner_up_count
+    return None, 0, 0
+
+
 def parse_seeds(raw):
     parts = [part.strip() for part in raw.split(",")]
     if not parts or any(not part for part in parts):
@@ -172,6 +188,19 @@ def parse_seeds(raw):
     if len(seeds) != len(set(seeds)):
         raise ValueError("--seeds must not contain duplicates")
     return seeds
+
+
+def parse_k_ladder(raw):
+    parts = [part.strip() for part in raw.split(",")]
+    if not parts or any(not part for part in parts):
+        raise ValueError("--k-ladder must be a comma-separated list of integers")
+    try:
+        ladder = [int(part) for part in parts]
+    except ValueError as exc:
+        raise ValueError("--k-ladder must be a comma-separated list of integers") from exc
+    if any(k <= 0 or k > 64 for k in ladder):
+        raise ValueError("--k-ladder values must be between 1 and 64")
+    return ladder
 
 
 def load_items(path, offset, limit):
@@ -293,6 +322,24 @@ def large_tree_body(args, item, base_seed):
         "max_tokens": args.max_tokens,
         "temperature": args.temperature,
         "seed": item_seed(base_seed, item),
+        "tree": tree,
+    }
+
+
+def adaptive_k_tree_body(args, item, base_seed, rung_index, branches):
+    tree = {
+        "policy": "beam",
+        "branches": branches,
+        "budget_tokens": branches * args.max_tokens,
+    }
+    if args.fork_at_entropy is not None:
+        tree["fork_at_entropy"] = args.fork_at_entropy
+    return {
+        "model": args.large_model,
+        "messages": prompt_messages(item),
+        "max_tokens": args.max_tokens,
+        "temperature": args.temperature,
+        "seed": item_seed(base_seed, item) + rung_index,
         "tree": tree,
     }
 
@@ -1488,6 +1535,86 @@ def run_large_tree_item(args, item, base_seed):
     return record
 
 
+def run_adaptive_k_item(args, item, base_seed):
+    started = time.perf_counter()
+    url = args.large_url.rstrip("/") + "/v1/tree/completions"
+    rungs_used = []
+    answers_by_rung = []
+    accumulated_answers = []
+    large_tokens = 0
+    errors = []
+    answer = None
+    leader_count = 0
+    runner_up_count = 0
+    stopped_early = False
+
+    for rung_index, branches in enumerate(args.k_ladder_values):
+        payload, request_error = post_json(
+            url,
+            adaptive_k_tree_body(args, item, base_seed, rung_index, branches),
+            args.timeout,
+        )
+        rung_tokens, token_report_valid = tree_token_report(payload)
+        large_tokens += rung_tokens
+        _content, content_error = completion_content(payload)
+        branch_answers, _branch_leader, _leader_count, _voter_count, valid = (
+            branch_answer_report(payload)
+        )
+        prefix = "adaptive_k_rung_{}".format(branches)
+        for error in prefixed_errors(
+            prefix,
+            request_errors(
+                request_error, content_error, rung_tokens, token_report_valid
+            ),
+        ):
+            add_error(errors, error)
+        if request_error is None and not valid:
+            add_error(errors, prefix + ":invalid_branch_answers")
+
+        rung_answers = [
+            branch_answers[branch_id]
+            for branch_id in sorted(branch_answers, key=branch_id_sort_key)
+        ]
+        rungs_used.append(branches)
+        answers_by_rung.append(rung_answers)
+        accumulated_answers.extend(
+            rung_answer for rung_answer in rung_answers if rung_answer is not None
+        )
+        answer, leader_count, runner_up_count = plurality_report(accumulated_answers)
+        agreed = (
+            leader_count - runner_up_count >= args.agree_margin
+            and leader_count >= args.min_leader
+        )
+        if agreed:
+            stopped_early = rung_index < len(args.k_ladder_values) - 1
+            break
+
+    if answer is None:
+        add_error(errors, "adaptive_k:no_final_answer")
+    record = common_record(
+        args,
+        "adaptive_k",
+        item,
+        base_seed,
+        started,
+        answer,
+        0,
+        large_tokens,
+        errors,
+    )
+    record.update(
+        {
+            "rungs_used": rungs_used,
+            "total_branches_sampled": sum(rungs_used),
+            "answers_by_rung": answers_by_rung,
+            "leader_count": leader_count,
+            "runner_up_count": runner_up_count,
+            "stopped_early": stopped_early,
+        }
+    )
+    return record
+
+
 def run_spec_tree_draft(args, item, base_seed):
     tree_url = args.small_url.rstrip("/") + "/v1/tree/completions"
     payload, request_error = post_json(
@@ -1770,6 +1897,8 @@ def run_mode_item(args, item, base_seed):
         return run_large_bo8_item(args, item, base_seed)
     if args.mode == "large_tree":
         return run_large_tree_item(args, item, base_seed)
+    if args.mode == "adaptive_k":
+        return run_adaptive_k_item(args, item, base_seed)
     if args.mode == "spec_tree":
         return run_spec_tree_item(args, item, base_seed)
     return run_large_greedy_item(args, item, base_seed)
@@ -1849,6 +1978,17 @@ def error_record(args, item, base_seed, exc):
                 "draft_errors": ["internal_error:draft_not_completed"],
                 "verify_errors": ["internal_error:verify_not_completed"],
                 "repair_errors": [],
+            }
+        )
+    elif args.mode == "adaptive_k":
+        record.update(
+            {
+                "rungs_used": [],
+                "total_branches_sampled": 0,
+                "answers_by_rung": [],
+                "leader_count": 0,
+                "runner_up_count": 0,
+                "stopped_early": False,
             }
         )
     elif args.mode == "large_bo8":
@@ -2074,6 +2214,37 @@ def valid_resume_record(record):
         ):
             if not isinstance(record.get(field), list):
                 return False
+    if key[0] == "adaptive_k":
+        adaptive_fields = (
+            "rungs_used",
+            "total_branches_sampled",
+            "answers_by_rung",
+            "leader_count",
+            "runner_up_count",
+            "stopped_early",
+        )
+        if any(field not in record for field in adaptive_fields):
+            return False
+        rungs_used = record.get("rungs_used")
+        answers_by_rung = record.get("answers_by_rung")
+        if (
+            not isinstance(rungs_used, list)
+            or any(nonnegative_int(rung) is None or rung == 0 for rung in rungs_used)
+            or nonnegative_int(record.get("total_branches_sampled")) is None
+            or record.get("total_branches_sampled") != sum(rungs_used)
+            or not isinstance(answers_by_rung, list)
+            or len(answers_by_rung) != len(rungs_used)
+            or nonnegative_int(record.get("leader_count")) is None
+            or nonnegative_int(record.get("runner_up_count")) is None
+            or not isinstance(record.get("stopped_early"), bool)
+        ):
+            return False
+        for answers in answers_by_rung:
+            if not isinstance(answers, list) or any(
+                answer is not None and not isinstance(answer, str)
+                for answer in answers
+            ):
+                return False
     gate_fields = ("gate_p", "gate_threshold", "gated")
     if any(field in record for field in gate_fields):
         if any(field not in record for field in gate_fields):
@@ -2252,6 +2423,26 @@ def summarize(args, seed, records):
                 "repair_rate": repaired_count / len(observed) if observed else 0.0,
             }
         )
+    elif args.mode == "adaptive_k":
+        observed = [
+            record["stopped_early"]
+            for record in records
+            if isinstance(record.get("stopped_early"), bool)
+        ]
+        stopped_early_count = sum(value is True for value in observed)
+        summary.update(
+            {
+                "stopped_early_count": stopped_early_count,
+                "stopped_early_observed_items": len(observed),
+                "stopped_early_rate": (
+                    stopped_early_count / len(observed) if observed else 0.0
+                ),
+                "total_branches_sampled": sum(
+                    nonnegative_int(record.get("total_branches_sampled")) or 0
+                    for record in records
+                ),
+            }
+        )
     if args.mode in ("cascade", "cascade_score"):
         observed = [
             record["escalated"]
@@ -2280,6 +2471,8 @@ def print_summary_table(summaries):
         escalation_rate = row.get("escalation_rate")
         if row["mode"] == "spec_tree":
             escalation_rate = row.get("repair_rate")
+        elif row["mode"] == "adaptive_k":
+            escalation_rate = row.get("stopped_early_rate")
         print(
             "{mode:<13} {seed:>5} {items:>6} {correct:>8} {accuracy:>9.2%} "
             "{escalation:>9} {small:>13} {large:>13} {cost:>11.3f} "
@@ -2493,6 +2686,14 @@ def run_benchmark(args, items, seeds):
                 "small_model_defaulted": args.small_model_defaulted,
             }
         )
+    elif args.mode == "adaptive_k":
+        output["config"].update(
+            {
+                "k_ladder": args.k_ladder_values,
+                "agree_margin": args.agree_margin,
+                "min_leader": args.min_leader,
+            }
+        )
     if args.gate_model:
         output["config"].update(
             {
@@ -2629,6 +2830,27 @@ def aggregate_summaries(rows, mode):
                 ),
             }
         )
+    elif mode == "adaptive_k":
+        stopped_early_count = sum(
+            nonnegative_int(row.get("stopped_early_count")) or 0 for row in rows
+        )
+        observed_items = sum(
+            nonnegative_int(row.get("stopped_early_observed_items")) or 0
+            for row in rows
+        )
+        aggregate.update(
+            {
+                "stopped_early_count": stopped_early_count,
+                "stopped_early_observed_items": observed_items,
+                "stopped_early_rate": (
+                    stopped_early_count / observed_items if observed_items else 0.0
+                ),
+                "total_branches_sampled": sum(
+                    nonnegative_int(row.get("total_branches_sampled")) or 0
+                    for row in rows
+                ),
+            }
+        )
     if mode in ("cascade", "cascade_score"):
         escalated_count = sum(
             nonnegative_int(row.get("escalated_count")) or 0 for row in rows
@@ -2684,7 +2906,8 @@ def compare_config_mismatches(documents):
         modes = {
             row.get("mode")
             for row in summary_rows(document)
-            if row.get("mode") in ("cascade", "cascade_score", "spec_tree")
+            if row.get("mode")
+            in ("cascade", "cascade_score", "spec_tree", "adaptive_k")
         }
         if modes:
             tree_configs.append(config)
@@ -2848,6 +3071,24 @@ def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
                 tree_summary["repair_rate"],
             )
         )
+    elif tree_mode == "adaptive_k":
+        print(
+            "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
+            "baseline cost/correct {:.6f}, {} accuracy delta {:+.6f} pt, {} "
+            "early-stop rate {:.6%}".format(
+                mode,
+                conclusion,
+                tree_mode,
+                format_ratio(cost_ratio),
+                tree_mode,
+                tree_summary["cost_per_correct"],
+                baseline["cost_per_correct"],
+                tree_mode,
+                accuracy_delta_points,
+                tree_mode,
+                tree_summary["stopped_early_rate"],
+            )
+        )
     else:
         print(
             "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
@@ -2878,9 +3119,10 @@ def compare_summaries(paths):
     if len(first_modes) != 1:
         raise ValueError("first summary JSON must contain exactly one mode")
     tree_mode = next(iter(first_modes))
-    if tree_mode not in ("cascade", "cascade_score", "spec_tree"):
+    if tree_mode not in ("cascade", "cascade_score", "spec_tree", "adaptive_k"):
         raise ValueError(
-            "first summary mode must be 'cascade', 'cascade_score', or 'spec_tree'"
+            "first summary mode must be 'cascade', 'cascade_score', 'spec_tree', "
+            "or 'adaptive_k'"
         )
     expected_modes = [tree_mode]
     for document in documents[1:]:
@@ -2964,6 +3206,17 @@ def compare_summaries(paths):
         print(
             "spec_tree_repair_rate: {:.6%}".format(tree_summary["repair_rate"])
         )
+    elif tree_mode == "adaptive_k":
+        print(
+            "adaptive_k_stopped_early_rate: {:.6%}".format(
+                tree_summary["stopped_early_rate"]
+            )
+        )
+        print(
+            "adaptive_k_total_branches_sampled: {}".format(
+                tree_summary["total_branches_sampled"]
+            )
+        )
     else:
         print(
             "{}_escalation_rate: {:.6%}".format(
@@ -2977,6 +3230,31 @@ def compare_summaries(paths):
 def print_dry_run(args, item, seed):
     small_base = args.small_url.rstrip("/")
     large_base = args.large_url.rstrip("/")
+    adaptive_rungs = [
+        {
+            "rung": rung_index + 1,
+            "k": branches,
+            "url": large_base + "/v1/tree/completions",
+            "body": adaptive_k_tree_body(
+                args, item, seed, rung_index, branches
+            ),
+        }
+        for rung_index, branches in enumerate(args.k_ladder_values[:2])
+    ]
+    if args.mode == "adaptive_k":
+        print(
+            json.dumps(
+                {
+                    "item_id": item["id"],
+                    "item_index": item["item_index"],
+                    "seed": seed,
+                    "adaptive_k": adaptive_rungs,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
     draft_placeholders = [
         "<draft_{}>".format(index) for index in range(args.branches)
     ]
@@ -3016,6 +3294,7 @@ def print_dry_run(args, item, seed):
             "url": large_base + "/v1/tree/completions",
             "body": large_tree_body(args, item, seed),
         },
+        "adaptive_k": adaptive_rungs,
         "large_bo8": [
             {
                 "sample_index": sample_index,
@@ -3093,6 +3372,23 @@ def build_parser():
     parser.add_argument("--small-url", default="http://127.0.0.1:30000")
     parser.add_argument("--large-url", default="http://127.0.0.1:30001")
     parser.add_argument("--branches", type=int, default=8)
+    parser.add_argument(
+        "--k-ladder",
+        default="2,4,8,16",
+        help="adaptive_k branch counts issued sequentially",
+    )
+    parser.add_argument(
+        "--agree-margin",
+        type=int,
+        default=2,
+        help="adaptive_k minimum leader minus runner-up vote count",
+    )
+    parser.add_argument(
+        "--min-leader",
+        type=int,
+        default=2,
+        help="adaptive_k minimum plurality leader vote count",
+    )
     parser.add_argument("--agree-threshold", type=int, default=6)
     parser.add_argument(
         "--answer-mode",
@@ -3146,8 +3442,8 @@ def build_parser():
         nargs="+",
         metavar="SUMMARY_JSON",
         help=(
-            "compare cascade, cascade_score, or spec_tree JSON with one or both of "
-            "large_bo8 and large_greedy JSON"
+            "compare cascade, cascade_score, spec_tree, or adaptive_k JSON with "
+            "one or both of large_bo8 and large_greedy JSON"
         ),
     )
     parser.add_argument(
@@ -3162,7 +3458,8 @@ def validate_measurement_args(parser, args):
     if not args.data:
         parser.error("--data is required unless --compare is used")
     if (
-        args.mode in ("cascade", "cascade_score") or args.dry_run
+        args.mode in ("cascade", "cascade_score")
+        or (args.dry_run and args.mode != "adaptive_k")
     ) and not args.small_model:
         parser.error(
             "--small-model is required for cascade, cascade_score, and --dry-run"
@@ -3171,6 +3468,14 @@ def validate_measurement_args(parser, args):
         parser.error("--large-model is required unless --compare is used")
     if args.branches <= 0 or args.branches > 64:
         parser.error("--branches must be between 1 and 64")
+    try:
+        args.k_ladder_values = parse_k_ladder(args.k_ladder)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.agree_margin < 0:
+        parser.error("--agree-margin must be nonnegative")
+    if args.min_leader <= 0:
+        parser.error("--min-leader must be positive")
     if args.agree_threshold <= 0:
         parser.error("--agree-threshold must be positive")
     if not math.isfinite(args.gate_threshold) or not 0.0 <= args.gate_threshold <= 1.0:

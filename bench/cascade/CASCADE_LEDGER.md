@@ -436,3 +436,86 @@ in this worktree, so its live response envelope remains unverified here. The
 parser accepts the expected `mean_logprob` and `n_tokens` forms, but the exact
 merged route response still needs an orchestrator canary. No GPU endpoint was
 called, no pytest command was run, and no commit or push was performed.
+
+## Sequential agreement-driven adaptive k (2026-07-24)
+
+Lane: `feat/adaptivek`
+
+`adaptive_k` samples only the large model. It does not call the small model and
+does not escalate to another model. The default `--k-ladder` is `2,4,8,16`.
+Each rung sends one `POST /v1/tree/completions` request to `--large-url` with
+the rung value as `tree.branches` and `branches * max_tokens` as
+`tree.budget_tokens`. Rung zero uses the same item seed as `large_tree`; each
+later rung adds its zero-based rung index so repeated prompt requests receive
+fresh deterministic samples.
+
+### Stopping rule
+
+After every response, the harness appends that rung's non-null branch answers
+to all earlier answers. Numeric mode uses the existing numeric normalization.
+Math mode groups answers through the existing `vote_key` equivalence path.
+Within each rung, branch ids are sorted before accumulation, so equal-count
+plurality ties resolve to the earliest rung and then the earliest branch id.
+
+Let L be the accumulated plurality count and R be the accumulated runner-up
+count, with R equal to zero when there is only one answer class. Sampling stops
+when both conditions hold:
+
+    L - R >= agree_margin
+    L >= min_leader
+
+The defaults are `agree_margin=2` and `min_leader=2`. If no rung satisfies the
+rule, the final answer is the accumulated plurality after the last rung, with
+the same deterministic earliest-seen tie break.
+
+### Cost and records
+
+Every issued rung is charged. For each response, the harness sums all values in
+`tree.tokens_spent_per_branch` and adds that amount to the accumulated
+`large_tokens`. The item cost remains:
+
+    large_tokens * large_cost
+
+Repeated prompt prefills may benefit from the server radix cache, but the
+harness does not treat later rungs as free. `total_branches_sampled` is the sum
+of every issued rung value. Item records use `common_record` and additionally
+store `rungs_used`, `total_branches_sampled`, `answers_by_rung`, final
+`leader_count`, final `runner_up_count`, and `stopped_early`.
+
+`--compare` accepts `adaptive_k` as the first tree-mode summary and reports its
+aggregate early-stop rate and total branches sampled against `large_bo8` and
+`large_greedy` baselines.
+
+### Dry-run proof
+
+The no-network dry run used one item, seed 0, `max_tokens=16`, temperature 0.7,
+and the default ladder. It printed exactly the first two adaptive request
+bodies:
+
+    rung 1, k=2
+    POST http://127.0.0.1:30001/v1/tree/completions
+    {
+      "model": "LARGE_SERVED_MODEL",
+      "messages": [{"role": "user", "content": "What is 1 + 1?<ANSWER_SUFFIX>"}],
+      "max_tokens": 16,
+      "temperature": 0.7,
+      "seed": 0,
+      "tree": {"policy": "beam", "branches": 2, "budget_tokens": 32}
+    }
+
+    rung 2, k=4
+    POST http://127.0.0.1:30001/v1/tree/completions
+    {
+      "model": "LARGE_SERVED_MODEL",
+      "messages": [{"role": "user", "content": "What is 1 + 1?<ANSWER_SUFFIX>"}],
+      "max_tokens": 16,
+      "temperature": 0.7,
+      "seed": 1,
+      "tree": {"policy": "beam", "branches": 4, "budget_tokens": 64}
+    }
+
+The Windows `py -3` launcher completed this dry run with exit code 0. The
+`python` command itself was unavailable in this environment. No live tree
+server was called, so response-envelope behavior and real multi-rung stopping
+still require an orchestrator canary. No pytest command was run, and no commit
+or push was performed.
