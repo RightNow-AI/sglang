@@ -168,6 +168,7 @@ from sglang.srt.observability.trace import (
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 from sglang.srt.parser.template_manager import TemplateManager
 from sglang.srt.server_args import PortArgs, ServerArgs
+from sglang.srt.tree.verify import TreeVerifyRequest, verify_branches
 from sglang.srt.utils import (
     add_prometheus_middleware,
     add_prometheus_track_response_middleware,
@@ -1690,6 +1691,30 @@ async def openai_v1_tree_completions(
     """AutoTree-compatible tree completion endpoint."""
     return await raw_request.app.state.openai_serving_tree.handle_request(
         request, raw_request
+    )
+
+
+@app.post("/v1/tree/verify", dependencies=[Depends(validate_json_request)])
+async def tree_verify(request: TreeVerifyRequest, raw_request: Request):
+    """Score candidate continuations with one prefill-only batch."""
+    scores = await verify_branches(
+        _global_state.tokenizer_manager,
+        request.prompt,
+        request.continuations,
+        request=raw_request,
+    )
+    return ORJSONResponse(
+        {
+            "scores": [
+                {
+                    "mean_logprob": score["mean_logprob"],
+                    "sum_logprob": score["sum_logprob"],
+                    "n_tokens": score["n_scored_tokens"],
+                    "error": score["error"],
+                }
+                for score in scores
+            ]
+        }
     )
 
 
