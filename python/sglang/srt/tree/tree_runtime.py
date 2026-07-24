@@ -51,6 +51,7 @@ VALUE_WARMUP_TOKENS = int(_os.environ.get('AUTOTREE_VALUE_WARMUP_TOKENS', '8'))
 # stronger than mean logprob (value head).
 VALUE_MARGIN = selection.env_float('AUTOTREE_VALUE_MARGIN', 0.8)
 VALUE_MIN_KEEP = int(_os.environ.get('AUTOTREE_VALUE_MIN_KEEP', '2'))
+ADAPT_MARGIN = selection.env_float('AUTOTREE_ADAPT_MARGIN', 2.0)
 
 
 def _validate_branch_count(params: Dict[str, Any]) -> int:
@@ -60,6 +61,17 @@ def _validate_branch_count(params: Dict[str, Any]) -> int:
             f'tree branches={branches} exceeds configured maximum='
             f'{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)'
         )
+    adaptive_width = params.get("adaptive_width")
+    if adaptive_width is not None:
+        if not isinstance(adaptive_width, int) or isinstance(adaptive_width, bool):
+            raise ValueError("adaptive_width must be an integer")
+        if adaptive_width <= branches:
+            raise ValueError("adaptive_width must be greater than branches")
+        if adaptive_width > MAX_BRANCHES:
+            raise ValueError(
+                f"adaptive_width={adaptive_width} exceeds configured maximum="
+                f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
+            )
     return branches
 
 
@@ -136,7 +148,7 @@ class _TreeRun:
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
         "orig_sampling", "forked", "fork_attempted", "cache_namespace",
         "fork_cache_supported", "shared_prefix_group", "entropy_logprobs",
-        "entropy_lp_seen",
+        "entropy_lp_seen", "fork_input_ids", "adaptive_failed",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -157,6 +169,8 @@ class _TreeRun:
         self.shared_prefix_group: Optional[SharedPrefixGroup] = None
         self.entropy_logprobs = deque(maxlen=ENTROPY_FORK_WINDOW_SIZE)
         self.entropy_lp_seen = 0
+        self.fork_input_ids = None
+        self.adaptive_failed = False
 
 
 class SchedulerTreeRuntime:
@@ -519,9 +533,25 @@ class SchedulerTreeRuntime:
             parent_req.extend_range = old_range
 
     def _fork_branches(
-        self, run: _TreeRun, parent_req: Any, child_input_ids: Any = None
+        self,
+        run: _TreeRun,
+        parent_req: Any,
+        child_input_ids: Any = None,
+        target_count: Optional[int] = None,
     ) -> None:
-        n = max(1, int(run.params.get("branches", 1)))
+        n = max(
+            1,
+            int(
+                target_count
+                if target_count is not None
+                else run.params.get("branches", 1)
+            ),
+        )
+        if n > MAX_BRANCHES:
+            raise ValueError(
+                f"tree branches={n} exceeds configured maximum="
+                f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
+            )
         parent = run.branches.get("0")
         if parent is None:
             run.branches["0"] = _BranchState(parent_req.rid, 0, parent_req)
@@ -536,7 +566,17 @@ class SchedulerTreeRuntime:
 
         import msgspec
 
+        if child_input_ids is not None:
+            run.fork_input_ids = child_input_ids
+        elif run.fork_input_ids is not None:
+            child_input_ids = run.fork_input_ids
+
+        spawned = 0
         for b in range(1, n):
+            if len(run.branches) >= n:
+                break
+            if str(b) in run.branches:
+                continue
             child_rid = f"{run.parent_rid}#tree{b}"
             sp = getattr(base, "sampling_params", None)
             child_sp = copy.copy(sp) if sp is not None else sp
@@ -568,7 +608,8 @@ class SchedulerTreeRuntime:
             branch = _BranchState(child_rid, b, None)
             run.branches[str(b)] = branch
             self.branch_index[child_rid] = run
-        run.forked = n > 1
+            spawned += 1
+        run.forked = len(run.branches) > 1
         if run.forked:
             try:
                 shared_input_ids = (
@@ -590,7 +631,7 @@ class SchedulerTreeRuntime:
                 )
         logger.info(
             "[tree] %s forked %d sibling branches via intake path",
-            run.parent_rid, n - 1,
+            run.parent_rid, spawned,
         )
 
     def _account_tokens(
@@ -717,10 +758,11 @@ class SchedulerTreeRuntime:
         on an answer that the still-running branches can no longer outvote,
         the tree's outcome is decided - finalize immediately and reclaim every
         remaining token. Safe by construction with respect to the final vote."""
-        if run.finalized or len(run.branches) < 3:
+        if run.finalized:
             return
-        total = len(run.branches)
-        needed = total // 2 + 1
+        adaptive_width = run.params.get("adaptive_width")
+        if adaptive_width is None and len(run.branches) < 3:
+            return
         counts: Dict[str, int] = {}
         for b in run.branches.values():
             if b.req is None:
@@ -734,6 +776,12 @@ class SchedulerTreeRuntime:
                 counts[answer] = counts.get(answer, 0) + 1
         if not counts:
             return
+        if self._maybe_expand_adaptive_width(run, counts):
+            return
+        total = len(run.branches)
+        if total < 3:
+            return
+        needed = total // 2 + 1
         top_answer, top_count = max(counts.items(), key=lambda kv: kv[1])
         if top_count >= needed:
             logger.info(
@@ -742,6 +790,61 @@ class SchedulerTreeRuntime:
                 run.parent_rid, top_answer, top_count, total,
             )
             self._finalize(run, reason="majority_locked")
+
+    def _maybe_expand_adaptive_width(
+        self, run: _TreeRun, counts: Dict[str, int]
+    ) -> bool:
+        adaptive_width = run.params.get("adaptive_width")
+        if adaptive_width is None or run.finalized or run.adaptive_failed:
+            return False
+        if len(counts) < 2:
+            return False
+
+        target = min(int(adaptive_width), MAX_BRANCHES)
+        current = len(run.branches)
+        if current >= target:
+            return False
+
+        ordered_counts = sorted(counts.values(), reverse=True)
+        margin = ordered_counts[0] - ordered_counts[1]
+        if margin >= ADAPT_MARGIN:
+            return False
+
+        budget = int(run.params.get("budget_tokens", 0) or 0)
+        if budget and run.spent >= budget:
+            return False
+
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None:
+            return False
+
+        before = len(run.branches)
+        try:
+            self._fork_branches(
+                run,
+                parent.req,
+                child_input_ids=run.fork_input_ids,
+                target_count=target,
+            )
+        except Exception:
+            run.adaptive_failed = True
+            logger.exception(
+                "[tree] %s adaptive-width spawn failed; continuing at width %d",
+                run.parent_rid,
+                len(run.branches),
+            )
+        spawned = len(run.branches) - before
+        if spawned <= 0:
+            return False
+        logger.info(
+            "[tree] %s adaptive width %d -> %d: vote margin %d < %.3f",
+            run.parent_rid,
+            before,
+            len(run.branches),
+            margin,
+            ADAPT_MARGIN,
+        )
+        return True
 
     def _attach_snapshot(self, run: _TreeRun, include_outputs: bool = False) -> None:
         """Publish the live tree trace on the parent request. The output

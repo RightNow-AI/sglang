@@ -8,9 +8,11 @@ existing SDK and conformance suite apply unchanged.
 from __future__ import annotations
 
 import dataclasses
+import os
 from typing import Any, Dict, List, Optional
 
 TREE_POLICIES = ("beam", "best_first", "mcts")
+MAX_BRANCHES = int(os.environ.get("AUTOTREE_MAX_BRANCHES", "64"))
 
 
 @dataclasses.dataclass
@@ -23,6 +25,7 @@ class TreeParams:
     scorer: Optional[str] = None
     fork_at_text: Optional[str] = None
     fork_at_entropy: Optional[float] = None
+    adaptive_width: Optional[int] = None
 
     def validate(self) -> None:
         if self.policy not in TREE_POLICIES:
@@ -47,6 +50,17 @@ class TreeParams:
             raise ValueError(
                 "fork_at_text and fork_at_entropy are mutually exclusive"
             )
+        if self.adaptive_width is not None:
+            if not isinstance(self.adaptive_width, int) or isinstance(
+                self.adaptive_width, bool
+            ):
+                raise ValueError("adaptive_width must be an integer")
+            if self.adaptive_width <= self.branches:
+                raise ValueError("adaptive_width must be greater than branches")
+            if self.adaptive_width > MAX_BRANCHES:
+                raise ValueError(
+                    f"adaptive_width must be at most {MAX_BRANCHES}"
+                )
 
     def to_runtime_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
