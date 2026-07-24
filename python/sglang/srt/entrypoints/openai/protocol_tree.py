@@ -8,6 +8,8 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from sglang.srt.tree.params import MAX_BRANCHES
+
 
 TreePolicy = Literal["beam", "best_first", "mcts"]
 FinishReason = Literal["stop", "length"]
@@ -29,6 +31,7 @@ class TreeParameters(BaseModel):
     scorer: Optional[str] = None
     fork_at_text: Optional[str] = Field(default=None, min_length=1, max_length=64)
     fork_at_entropy: Optional[float] = Field(default=None, gt=0)
+    adaptive_width: Optional[int] = Field(default=None, ge=1, le=MAX_BRANCHES)
 
     @model_validator(mode="after")
     def validate_fork_trigger(self) -> "TreeParameters":
@@ -36,6 +39,11 @@ class TreeParameters(BaseModel):
             raise ValueError(
                 "fork_at_text and fork_at_entropy are mutually exclusive"
             )
+        if (
+            self.adaptive_width is not None
+            and self.adaptive_width <= self.branches
+        ):
+            raise ValueError("adaptive_width must be greater than branches")
         return self
 
 

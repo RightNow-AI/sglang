@@ -97,6 +97,7 @@ class OpenAIServingTree(OpenAIServingBase):
                 scorer=request.tree.scorer,
                 fork_at_text=request.tree.fork_at_text,
                 fork_at_entropy=request.tree.fork_at_entropy,
+                adaptive_width=request.tree.adaptive_width,
             ),
         )
         tree_request.tree.validate()
