@@ -31,6 +31,7 @@ import secrets
 from collections import deque
 from typing import Any, Dict, Optional
 
+from sglang.srt.tree import selection
 from sglang.srt.tree.shared_prefix import SharedPrefixGroup
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ VALUE_WARMUP_TOKENS = int(_os.environ.get('AUTOTREE_VALUE_WARMUP_TOKENS', '8'))
 # minority-correct branches (accuracy loss); the naive logprob proxy
 # cannot separate branches more finely. Lower this only with a scorer
 # stronger than mean logprob (value head).
-VALUE_MARGIN = float(_os.environ.get('AUTOTREE_VALUE_MARGIN', '0.8'))
+VALUE_MARGIN = selection.env_float('AUTOTREE_VALUE_MARGIN', 0.8)
 VALUE_MIN_KEEP = int(_os.environ.get('AUTOTREE_VALUE_MIN_KEEP', '2'))
 
 
@@ -105,7 +106,7 @@ TAIL_SNAPSHOT_PARENT_MARGIN = int(
 # minority-correct branches (accuracy loss); the naive logprob proxy
 # cannot separate branches more finely. Lower this only with a scorer
 # stronger than mean logprob (value head).
-VALUE_MARGIN = float(_os.environ.get("AUTOTREE_VALUE_MARGIN", "0.8"))
+VALUE_MARGIN = selection.env_float("AUTOTREE_VALUE_MARGIN", 0.8)
 VALUE_MIN_KEEP = int(_os.environ.get("AUTOTREE_VALUE_MIN_KEEP", "2"))
 
 
@@ -855,14 +856,28 @@ class SchedulerTreeRuntime:
                 votes[answer] = votes.get(answer, 0) + 1
         pool = active
         if votes:
-            top_count = max(votes.values())
-            leaders = {a for a, c in votes.items() if c == top_count}
-            voted = [
-                b for b in active
-                if (self._extract_branch_answer(b) or "") in leaders
-            ]
-            if voted:
-                pool = voted
+            if selection.vote_mode() == "weighted":
+                # Confidence-weighted class selection (opt-in). The plurality
+                # branch below is the default and stays byte-identical.
+                win_key = selection.weighted_winning_key(
+                    (self._extract_branch_answer(b), b.mean_logprob())
+                    for b in active
+                )
+                voted = [
+                    b for b in active
+                    if self._extract_branch_answer(b) == win_key
+                ]
+                if voted:
+                    pool = voted
+            else:
+                top_count = max(votes.values())
+                leaders = {a for a, c in votes.items() if c == top_count}
+                voted = [
+                    b for b in active
+                    if (self._extract_branch_answer(b) or "") in leaders
+                ]
+                if voted:
+                    pool = voted
         winner = max(pool, key=lambda b: (b.mean_logprob(), -b.branch_id))
         run.winner_branch_id = winner.branch_id
         logger.info(

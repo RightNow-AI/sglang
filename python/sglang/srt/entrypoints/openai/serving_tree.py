@@ -273,23 +273,26 @@ class OpenAIServingTree(OpenAIServingBase):
                 counts.setdefault(ans, []).append(bid)
         if not counts:
             return None
+
+        def _lp(bid):
+            return float((branches.get(bid) or {}).get("mean_logprob", -1e9))
+
+        from sglang.srt.tree import selection
+
+        if selection.vote_mode() == "weighted":
+            # Confidence-weighted class selection (opt-in), mirroring the engine
+            # runtime so wire branch_answers and the engine winner agree. The
+            # plurality path below is the default and stays byte-identical.
+            win_key = selection.weighted_winning_key(
+                (ans, _lp(bid)) for bid, ans in answers.items() if ans is not None
+            )
+            if win_key is not None and win_key in counts:
+                return max(counts[win_key], key=_lp)
         best_answer = max(
             counts.items(),
-            key=lambda kv: (
-                len(kv[1]),
-                max(
-                    float((branches.get(b) or {}).get("mean_logprob", -1e9))
-                    for b in kv[1]
-                ),
-            ),
+            key=lambda kv: (len(kv[1]), max(_lp(b) for b in kv[1])),
         )
-        voters = best_answer[1]
-        return max(
-            voters,
-            key=lambda b: float(
-                (branches.get(b) or {}).get("mean_logprob", -1e9)
-            ),
-        )
+        return max(best_answer[1], key=_lp)
 
     async def _handle_streaming_request(
         self,
