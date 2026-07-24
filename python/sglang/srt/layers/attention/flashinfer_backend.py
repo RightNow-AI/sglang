@@ -51,6 +51,8 @@ from sglang.srt.speculative.spec_utils import (
     draft_kv_indices_used_len,
     generate_draft_decode_kv_indices,
 )
+from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
+from sglang.srt.tree.profile import incr as _autotree_profile_incr
 from sglang.srt.utils import (
     get_int_env_var,
     is_flashinfer_available,
@@ -1482,6 +1484,8 @@ class FlashInferAttnBackend(AttentionBackend):
         forward_batch: ForwardBatch,
         save_kv_cache: bool,
     ):
+        if _AUTOTREE_PROFILE_ENABLED:
+            _autotree_profile_incr("attention.shared_prefix_decode_fires")
         if layer.is_cross_attention or layer.sliding_window_size != -1:
             raise NotImplementedError(
                 'Tree shared-prefix decode currently requires full self-attention.'
