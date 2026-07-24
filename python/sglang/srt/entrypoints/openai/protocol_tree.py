@@ -71,6 +71,7 @@ class TreeCompletionRequest(BaseModel):
     n: int = 1
     seed: Optional[int] = None
     user: Optional[str] = None
+    context_version: str = ""
 
     @model_validator(mode="after")
     def validate_single_completion(self) -> "TreeCompletionRequest":
@@ -108,6 +109,8 @@ class TreeSummaryResponse(BaseModel):
     scorer: Optional[str]
     kv_reuse_ratio: Optional[float] = None
     branch_answers: Dict[str, Optional[str]] = {}
+    served_from_memo: bool = False
+    memo_key: Optional[str] = None
 
 
 class TreeResponseMessage(BaseModel):

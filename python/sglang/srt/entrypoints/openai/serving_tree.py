@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections import defaultdict
-from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Optional, Union
 
 from fastapi import Request
 from fastapi.responses import ORJSONResponse, StreamingResponse
@@ -32,6 +34,7 @@ from sglang.srt.tree import (
     TreeResult,
     TreeSummary,
 )
+from sglang.srt.tree.memo import MemoStore, canonical_key
 
 if TYPE_CHECKING:
     from sglang.srt.entrypoints.openai.serving_chat import OpenAIServingChat
@@ -48,6 +51,9 @@ class OpenAIServingTree(OpenAIServingBase):
     ) -> None:
         super().__init__(tokenizer_manager)
         self.chat_serving = chat_serving
+        self._memo_store = (
+            self._create_memo_store() if self._memo_feature_enabled() else None
+        )
 
     def _request_id_prefix(self) -> str:
         return "tree-"
@@ -56,6 +62,87 @@ class OpenAIServingTree(OpenAIServingBase):
         if not request.messages:
             return "Messages cannot be empty."
         return None
+
+    @staticmethod
+    def _memo_feature_enabled() -> bool:
+        return os.environ.get("AUTOTREE_MEMO") == "1"
+
+    @staticmethod
+    def _create_memo_store() -> MemoStore:
+        path = os.environ.get("AUTOTREE_MEMO_PATH") or os.path.join(
+            tempfile.gettempdir(), f"sglang-autotree-memo-{os.getpid()}.jsonl"
+        )
+        max_entries = int(os.environ.get("AUTOTREE_MEMO_MAX_ENTRIES", "10000"))
+        return MemoStore(
+            path,
+            max_entries=max_entries,
+            namespace="tree-serving",
+        )
+
+    def _active_memo_store(self) -> Optional[MemoStore]:
+        if not self._memo_feature_enabled():
+            return None
+        return getattr(self, "_memo_store", None)
+
+    @staticmethod
+    def _rendered_prompt_for_memo(adapted_request: TreeGenerateReqInput) -> Any:
+        base_request = adapted_request.base
+        text = getattr(base_request, "text", None)
+        if text is not None:
+            return text
+        input_ids = getattr(base_request, "input_ids", None)
+        if input_ids is not None:
+            return input_ids
+        raise ValueError("Tree memo requires a rendered text or token-id prompt.")
+
+    def _memo_key(
+        self,
+        adapted_request: TreeGenerateReqInput,
+        request: TreeCompletionRequest,
+    ) -> str:
+        sampling_params = {
+            "temperature": request.temperature,
+            "top_p": request.top_p,
+            "max_tokens": request.resolved_max_tokens,
+        }
+        if request.seed is not None:
+            sampling_params.update(
+                {
+                    "seed": request.resolved_seed,
+                    "seeded_determinism_requested": True,
+                }
+            )
+        return canonical_key(
+            self._rendered_prompt_for_memo(adapted_request),
+            request.model,
+            sampling_params,
+            request.context_version,
+        )
+
+    def memo_stats(self) -> dict[str, Any]:
+        store = getattr(self, "_memo_store", None)
+        if store is None:
+            return {
+                "hits": 0,
+                "misses": 0,
+                "hit_rate": 0.0,
+                "tokens_saved": 0,
+                "agreement_rate": None,
+            }
+        stats = store.stats()
+        return {
+            "hits": stats["hits"],
+            "misses": stats["misses"],
+            "hit_rate": stats["hit_rate"],
+            "tokens_saved": stats["tokens_saved_estimate"],
+            "agreement_rate": stats["agreement_rate"],
+        }
+
+    def clear_memo(self) -> dict[str, Any]:
+        store = getattr(self, "_memo_store", None)
+        if store is not None:
+            store.clear()
+        return self.memo_stats()
 
     def _convert_to_internal_request(
         self,
@@ -109,6 +196,18 @@ class OpenAIServingTree(OpenAIServingBase):
         request: TreeCompletionRequest,
         raw_request: Request,
     ) -> Union[TreeCompletionResponse, ORJSONResponse]:
+        memo_store = self._active_memo_store()
+        memo_key = None
+        if memo_store is not None:
+            memo_key = self._memo_key(adapted_request, request)
+            memo_entry = memo_store.get(
+                memo_key,
+                model=request.model,
+                context_version=request.context_version,
+            )
+            if memo_entry is not None:
+                return self._build_memo_response(request, memo_key, memo_entry)
+
         try:
             generator = self.tokenizer_manager.generate_request(
                 adapted_request, raw_request
@@ -125,7 +224,56 @@ class OpenAIServingTree(OpenAIServingBase):
                 err_type="InternalServerError",
                 status_code=500,
             )
+        response = self._build_completion_response(request, result)
+        if memo_store is not None and memo_key is not None:
+            memo_store.put(
+                memo_key,
+                answer_text=result.winner_text,
+                extracted_answer=self._extract_answer(result.winner_text),
+                model=request.model,
+                context_version=request.context_version,
+                n_tokens_saved=self._memo_tokens_saved(result),
+            )
+        return response
+
+    def _build_memo_response(
+        self,
+        request: TreeCompletionRequest,
+        memo_key: str,
+        memo_entry: dict[str, Any],
+    ) -> TreeCompletionResponse:
+        result = TreeResult(
+            winner_text=memo_entry["answer_text"],
+            winner_token_ids=[],
+            prompt_tokens=0,
+            completion_tokens=0,
+            summary=TreeSummary(
+                policy=request.tree.policy,
+                branch_count=request.tree.branches,
+                pruned_count=0,
+                merged_count=0,
+                winner_branch_id="memo",
+                tokens_spent_per_branch={},
+                final_scores={},
+                scorer=request.tree.scorer,
+                kv_reuse_ratio=None,
+                branch_answers={},
+                served_from_memo=True,
+                memo_key=memo_key,
+            ),
+            finish_reason="stop",
+        )
         return self._build_completion_response(request, result)
+
+    @staticmethod
+    def _memo_tokens_saved(result: TreeResult) -> int:
+        prompt_tokens = max(0, int(result.prompt_tokens))
+        branch_tokens = sum(
+            max(0, int(tokens))
+            for tokens in result.summary.tokens_spent_per_branch.values()
+        )
+        completion_tokens = branch_tokens or max(0, int(result.completion_tokens))
+        return prompt_tokens + completion_tokens
 
     def _coerce_plain_result(self, result, adapted_request) -> Optional[TreeResult]:
         """Phase-1 fallback: the runtime engine executes the tree in the
@@ -458,4 +606,6 @@ class OpenAIServingTree(OpenAIServingBase):
             scorer=summary.scorer,
             kv_reuse_ratio=summary.kv_reuse_ratio,
             branch_answers=getattr(summary, "branch_answers", {}) or {},
+            served_from_memo=getattr(summary, "served_from_memo", False),
+            memo_key=getattr(summary, "memo_key", None),
         )
