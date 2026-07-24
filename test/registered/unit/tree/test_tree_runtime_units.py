@@ -312,6 +312,33 @@ def test_attach_snapshot_is_token_aligned_at_last_parent_index():
     assert values[-1]["branches"]["0"]["tokens"] == 3
 
 
+def test_snapshot_throttle_still_delivers_branch_outputs_at_finalize(monkeypatch):
+    install_fake_finish_reason(monkeypatch)
+    runtime = tree_runtime.SchedulerTreeRuntime(SimpleNamespace())
+    run = tree_runtime._TreeRun("parent", {"policy": "beam"})
+    parent_req = FakeReq([10, 11])
+    parent_req.rid = "req-0"
+    parent_req.sampling_params = SimpleNamespace(max_new_tokens=100)
+    child_req = FakeReq([20, 21])
+    child_req.rid = "req-1"
+    parent = make_branch(0, tokens=2, mean=-1.0, req=parent_req)
+    child = make_branch(1, tokens=2, mean=-0.1, req=child_req)
+    run.branches = {"0": parent, "1": child}
+    run.branches_by_rid = {parent.rid: parent, child.rid: child}
+    run.forked = True
+
+    runtime._account_tokens(run, parent_req, [11], -1.0)
+
+    assert parent_req.customized_info is None
+
+    runtime._finalize(run, reason="test")
+
+    snapshot = parent_req.customized_info["autotree"][-1]
+    assert snapshot["winner_is_final"] is True
+    assert snapshot["branches"]["0"]["output_ids"] == [10, 11]
+    assert snapshot["branches"]["1"]["output_ids"] == [20, 21]
+
+
 def test_finalize_never_mutates_parent_output_ids(monkeypatch):
     install_fake_finish_reason(monkeypatch)
     runtime = tree_runtime.SchedulerTreeRuntime(SimpleNamespace())

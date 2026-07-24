@@ -132,11 +132,12 @@ class _BranchState:
 
 class _TreeRun:
     __slots__ = (
-        "parent_rid", "params", "branches", "spent", "finalized",
+        "parent_rid", "params", "branches", "branches_by_rid", "spent",
+        "finalized",
         "winner_branch_id", "pruned", "base_tokenized", "last_value_check",
         "orig_sampling", "forked", "fork_attempted", "cache_namespace",
         "fork_cache_supported", "shared_prefix_group", "entropy_logprobs",
-        "entropy_lp_seen",
+        "entropy_lp_seen", "tail_snapshot_active", "finished_sibling_rids",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -144,6 +145,7 @@ class _TreeRun:
         self.params = params
         self.base_tokenized = None
         self.branches: Dict[str, _BranchState] = {}
+        self.branches_by_rid: Dict[str, _BranchState] = {}
         self.spent = 0
         self.finalized = False
         self.winner_branch_id: Optional[int] = None
@@ -157,6 +159,8 @@ class _TreeRun:
         self.shared_prefix_group: Optional[SharedPrefixGroup] = None
         self.entropy_logprobs = deque(maxlen=ENTROPY_FORK_WINDOW_SIZE)
         self.entropy_lp_seen = 0
+        self.tail_snapshot_active = False
+        self.finished_sibling_rids = set()
 
 
 class SchedulerTreeRuntime:
@@ -170,6 +174,11 @@ class SchedulerTreeRuntime:
     def get_shared_prefix_group(self, rid: str) -> Optional[SharedPrefixGroup]:
         run = self.branch_index.get(rid)
         return run.shared_prefix_group if run is not None else None
+
+    def _register_branch(self, run: _TreeRun, branch: _BranchState) -> None:
+        run.branches[str(branch.branch_id)] = branch
+        run.branches_by_rid[branch.rid] = branch
+        self.branch_index[branch.rid] = run
 
     # -- intake ------------------------------------------------------------
 
@@ -239,7 +248,7 @@ class SchedulerTreeRuntime:
             return
         try:
             if self._uses_delayed_fork(run):
-                run.branches["0"] = _BranchState(req.rid, 0, req)
+                self._register_branch(run, _BranchState(req.rid, 0, req))
                 if run.params.get("fork_at_entropy") is not None:
                     self._record_entropy_logprobs(run, req, None)
                 self._maybe_trigger_delayed_fork(run, req)
@@ -248,7 +257,7 @@ class SchedulerTreeRuntime:
         except Exception:
             logger.exception("[tree] fork failed; parent continues alone")
             if not run.branches:
-                run.branches["0"] = _BranchState(req.rid, 0, req)
+                self._register_branch(run, _BranchState(req.rid, 0, req))
 
     def on_token(self, req: Any, token_ids, logprob: Optional[float]) -> None:
         run = self.branch_index.get(req.rid)
@@ -260,20 +269,20 @@ class SchedulerTreeRuntime:
             logger.exception("[tree] token hook failed for %s", req.rid)
 
     def on_request_finished(self, req: Any) -> None:
-        """Finish a delayed-fork request that never reached its trigger."""
+        """Track tail entry or finish a delayed fork that never triggered."""
         run = self.branch_index.get(req.rid)
-        if (
-            run is None
-            or run.finalized
-            or req.rid != run.parent_rid
-            or not self._uses_delayed_fork(run)
-            or run.forked
-        ):
+        if run is None or run.finalized:
+            return
+        if req.rid != run.parent_rid:
+            run.finished_sibling_rids.add(req.rid)
+            run.tail_snapshot_active = True
+            return
+        if not self._uses_delayed_fork(run) or run.forked:
             return
         parent = run.branches.get("0")
         if parent is None:
             parent = _BranchState(req.rid, 0, req)
-            run.branches["0"] = parent
+            self._register_branch(run, parent)
         parent.req = req
         parent.state = "finalized"
         self._restore_parent_sampling(run, req)
@@ -524,9 +533,10 @@ class SchedulerTreeRuntime:
         n = max(1, int(run.params.get("branches", 1)))
         parent = run.branches.get("0")
         if parent is None:
-            run.branches["0"] = _BranchState(parent_req.rid, 0, parent_req)
+            self._register_branch(run, _BranchState(parent_req.rid, 0, parent_req))
         else:
             parent.req = parent_req
+            run.branches_by_rid[parent.rid] = parent
 
         base = run.base_tokenized
         if base is None:
@@ -566,8 +576,7 @@ class SchedulerTreeRuntime:
             # prefix-sharing are established exactly as for a normal request.
             self.scheduler.handle_generate_request(child_base)
             branch = _BranchState(child_rid, b, None)
-            run.branches[str(b)] = branch
-            self.branch_index[child_rid] = run
+            self._register_branch(run, branch)
         run.forked = n > 1
         if run.forked:
             try:
@@ -596,11 +605,16 @@ class SchedulerTreeRuntime:
     def _account_tokens(
         self, run: _TreeRun, req: Any, token_ids, logprob: Optional[float]
     ) -> None:
-        state = None
-        for candidate in run.branches.values():
-            if candidate.rid == req.rid:
-                state = candidate
-                break
+        state = run.branches_by_rid.get(req.rid)
+        if state is None:
+            # Compatibility for runs assembled by older callers: pay the scan
+            # once, then index every later token for this branch.
+            state = next(
+                (branch for branch in run.branches.values() if branch.rid == req.rid),
+                None,
+            )
+            if state is not None:
+                run.branches_by_rid[req.rid] = state
         if state is None or state.state != "active":
             return
         if state.req is None:
@@ -643,37 +657,26 @@ class SchedulerTreeRuntime:
             # parent finishes (token cap) before the last sibling, that
             # snapshot has no chunk left to ride and the response ships
             # without branch outputs (measured: 26% empty branch_answers).
-            # Once the run enters its tail phase - any sibling finished, or
-            # the parent within TAIL_SNAPSHOT_PARENT_MARGIN tokens of its
-            # cap - periodic snapshots carry outputs too, so the last
-            # snapshot to escape always has them.
-            include_outputs = False
+            # Once the run enters its tail phase, periodic snapshots carry
+            # outputs so the last snapshot to escape always has them. Before
+            # then, building a snapshot has no delivery value and is skipped.
             if run.forked and not run.finalized:
-                if any(
-                    b.req is not None and b.req.finished()
-                    for b in run.branches.values()
-                    if b.branch_id != 0
-                ):
-                    include_outputs = True
-                else:
+                if not run.tail_snapshot_active:
                     parent_sp = getattr(req, "sampling_params", None)
                     parent_cap = getattr(parent_sp, "max_new_tokens", None)
                     if parent_cap:
                         remaining = int(parent_cap) - len(req.output_ids)
                         if remaining <= TAIL_SNAPSHOT_PARENT_MARGIN:
-                            include_outputs = True
-            self._attach_snapshot(run, include_outputs=include_outputs)
+                            run.tail_snapshot_active = True
+                if run.tail_snapshot_active:
+                    self._attach_snapshot(run, include_outputs=True)
             if (
                 not run.finalized
                 and len(run.branches) > 1
                 and _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") != "1"
             ):
-                siblings = [
-                    b for b in run.branches.values() if b.branch_id != 0
-                ]
-                if siblings and all(
-                    b.req is not None and b.req.finished() for b in siblings
-                ):
+                sibling_count = len(run.branches) - 1
+                if len(run.finished_sibling_rids) >= sibling_count:
                     self._finalize(run, reason="siblings_done")
                     return
 
