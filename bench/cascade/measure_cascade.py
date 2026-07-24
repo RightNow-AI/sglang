@@ -1863,6 +1863,21 @@ def record_key(record):
         return None
 
 
+def dedupe_records(records):
+    unique = []
+    seen = set()
+    duplicate_count = 0
+    for record in records:
+        key = record_key(record)
+        if key is not None and key in seen:
+            duplicate_count += 1
+            continue
+        if key is not None:
+            seen.add(key)
+        unique.append(record)
+    return unique, duplicate_count
+
+
 def valid_resume_record(record):
     required = (
         "id",
@@ -2133,9 +2148,7 @@ def append_record(handle, record):
     os.fsync(handle.fileno())
 
 
-def summarize(args, seed, records):
-    items = len(records)
-    correct_count = sum(record.get("correct") is True for record in records)
+def records_cost_units(args, records):
     total_small_tokens = sum(
         nonnegative_int(record.get("small_tokens")) or 0 for record in records
     )
@@ -2146,15 +2159,56 @@ def summarize(args, seed, records):
         nonnegative_int(record.get("large_prefill_tokens")) or 0
         for record in records
     )
-    if args.mode == "cascade_score":
-        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+    total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+    if args.mode in ("cascade_score", "spec_tree"):
         total_cost_units += total_large_prefill_tokens * args.large_prefill_cost
-    elif args.mode == "spec_tree":
-        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
-        total_cost_units += total_large_prefill_tokens * args.large_prefill_cost
-    else:
-        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+    return (
+        total_cost_units,
+        total_small_tokens,
+        total_large_tokens,
+        total_large_prefill_tokens,
+    )
+
+
+def seed_result_hash(records):
+    tuples = [
+        (str(record.get("id")), record.get("extracted"), record.get("correct"))
+        for record in sorted(records, key=lambda record: str(record.get("id")))
+    ]
+    encoded = json.dumps(
+        tuples, ensure_ascii=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def summarize(args, seed, records):
+    records, duplicate_count = dedupe_records(records)
+    if duplicate_count:
+        print(
+            "WARNING: MEASUREMENT INTEGRITY: dropped {} duplicate record(s) by "
+            "(mode, seed, id) during final summarization for mode={} seed={}".format(
+                duplicate_count, args.mode, seed
+            )
+        )
+    items = len(records)
+    correct_count = sum(record.get("correct") is True for record in records)
+    error_count = sum(bool(record.get("error")) for record in records)
+    error_n = sum(record.get("error") is not None for record in records)
+    non_error_records = [
+        record for record in records if record.get("error") is None
+    ]
+    non_error_correct_count = sum(
+        record.get("correct") is True for record in non_error_records
+    )
+    (
+        total_cost_units,
+        total_small_tokens,
+        total_large_tokens,
+        total_large_prefill_tokens,
+    ) = records_cost_units(args, records)
+    non_error_cost_units = records_cost_units(args, non_error_records)[0]
     wall_times = [nonnegative_number(record.get("wall_s")) or 0.0 for record in records]
+    wall_s_total = sum(wall_times)
     summary = {
         "mode": args.mode,
         "seed": seed,
@@ -2166,7 +2220,20 @@ def summarize(args, seed, records):
         "total_cost_units": total_cost_units,
         "cost_per_correct": total_cost_units / max(correct_count, 1),
         "mean_wall_s": statistics.mean(wall_times) if wall_times else 0.0,
-        "error_count": sum(bool(record.get("error")) for record in records),
+        "wall_s_total": wall_s_total,
+        "wall_per_correct": wall_s_total / max(correct_count, 1),
+        "error_count": error_count,
+        "error_n": error_n,
+        "error_rate": error_n / items if items else 0.0,
+        "accuracy_excluding_errors": (
+            non_error_correct_count / len(non_error_records)
+            if non_error_records
+            else 0.0
+        ),
+        "cost_per_correct_excluding_errors": (
+            non_error_cost_units / max(non_error_correct_count, 1)
+        ),
+        "_seed_result_hash": seed_result_hash(records),
     }
     if args.mode == "cascade_score":
         summary["total_large_prefill_tokens"] = total_large_prefill_tokens
@@ -2233,6 +2300,13 @@ def print_summary_table(summaries):
                 errors=row["error_count"],
             )
         )
+        print(
+            "integrity_seed_{seed}: error_n={error_n} error_rate={error_rate:.6%} "
+            "accuracy_excluding_errors={accuracy_excluding_errors:.6%} "
+            "cost_per_correct_excluding_errors="
+            "{cost_per_correct_excluding_errors:.6f} wall_s_total={wall_s_total:.6f} "
+            "wall_per_correct={wall_per_correct:.6f}".format(**row)
+        )
         if row["mode"] == "cascade_score":
             print(
                 "cascade_score_seed_{}_large_prefill_tokens: {}".format(
@@ -2259,6 +2333,12 @@ def write_json_atomic(path, value):
 
 
 def run_benchmark(args, items, seeds):
+    if args.fresh:
+        ensure_parent(args.out_jsonl)
+        with open(args.out_jsonl, "w", encoding="utf-8", newline="\n") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        print("fresh: truncated out-jsonl before benchmark: {}".format(args.out_jsonl))
     existing, invalid_lines, duplicate_lines = load_existing_records(args.out_jsonl)
     if invalid_lines:
         print(
@@ -2268,7 +2348,8 @@ def run_benchmark(args, items, seeds):
         )
     if duplicate_lines:
         print(
-            "warning: ignored {} duplicate mode+seed+id line(s) in {}".format(
+            "WARNING: MEASUREMENT INTEGRITY: dropped {} duplicate record(s) by "
+            "(mode, seed, id) while loading {}".format(
                 duplicate_lines, args.out_jsonl
             )
         )
@@ -2356,6 +2437,24 @@ def run_benchmark(args, items, seeds):
     for seed in seeds:
         seed_records = [records_by_key[(args.mode, seed, item["id"])] for item in items]
         summaries.append(summarize(args, seed, seed_records))
+    seed_hashes = [summary.pop("_seed_result_hash") for summary in summaries]
+    seeds_nominal = len(seed_hashes)
+    seeds_effective = len(set(seed_hashes))
+    for summary in summaries:
+        summary["seeds_nominal"] = seeds_nominal
+        summary["seeds_effective"] = seeds_effective
+    print(
+        "seed_evidence: mode={} seeds_nominal={} seeds_effective={}".format(
+            args.mode, seeds_nominal, seeds_effective
+        )
+    )
+    if seeds_effective < seeds_nominal:
+        print(
+            "FLAG: EFFECTIVE SEED COUNT: mode={} seeds_nominal={} "
+            "seeds_effective={}; nominal seeds are not independent evidence".format(
+                args.mode, seeds_nominal, seeds_effective
+            )
+        )
     output = {
         "config": {
             "mode": args.mode,
@@ -2380,6 +2479,7 @@ def run_benchmark(args, items, seeds):
             "fork_at_entropy": args.fork_at_entropy,
             "answer_suffix": answer_suffix(),
             "out_jsonl": os.path.abspath(args.out_jsonl),
+            "fresh": args.fresh,
         },
         "summaries": summaries,
     }
@@ -2433,6 +2533,12 @@ def rows_for_mode(document, expected_mode, path):
 def aggregate_summaries(rows, mode):
     items = sum(nonnegative_int(row.get("items")) or 0 for row in rows)
     correct_count = sum(nonnegative_int(row.get("correct_count")) or 0 for row in rows)
+    error_n = sum(
+        nonnegative_int(row.get("error_n"))
+        if nonnegative_int(row.get("error_n")) is not None
+        else nonnegative_int(row.get("error_count")) or 0
+        for row in rows
+    )
     total_small_tokens = sum(
         nonnegative_int(row.get("total_small_tokens")) or 0 for row in rows
     )
@@ -2442,6 +2548,39 @@ def aggregate_summaries(rows, mode):
     total_cost_units = sum(
         nonnegative_number(row.get("total_cost_units")) or 0.0 for row in rows
     )
+    cost_per_correct_excluding_values = [
+        nonnegative_number(row.get("cost_per_correct_excluding_errors"))
+        for row in rows
+    ]
+    if all(value is not None for value in cost_per_correct_excluding_values):
+        cost_units_excluding_errors = sum(
+            value * max(nonnegative_int(row.get("correct_count")) or 0, 1)
+            for row, value in zip(rows, cost_per_correct_excluding_values)
+        )
+    else:
+        cost_units_excluding_errors = None
+    wall_s_total = sum(
+        (
+            nonnegative_number(row.get("wall_s_total"))
+            if nonnegative_number(row.get("wall_s_total")) is not None
+            else (nonnegative_number(row.get("mean_wall_s")) or 0.0)
+            * (nonnegative_int(row.get("items")) or 0)
+        )
+        for row in rows
+    )
+    seeds_nominal = max(
+        [nonnegative_int(row.get("seeds_nominal")) or 0 for row in rows]
+        + [len(rows)]
+    )
+    effective_seed_values = [
+        nonnegative_int(row.get("seeds_effective"))
+        for row in rows
+        if nonnegative_int(row.get("seeds_effective")) is not None
+    ]
+    seeds_effective = (
+        max(effective_seed_values) if effective_seed_values else seeds_nominal
+    )
+    non_error_items = max(items - error_n, 0)
     aggregate = {
         "items": items,
         "correct_count": correct_count,
@@ -2450,6 +2589,20 @@ def aggregate_summaries(rows, mode):
         "total_large_tokens": total_large_tokens,
         "total_cost_units": total_cost_units,
         "cost_per_correct": total_cost_units / max(correct_count, 1),
+        "error_n": error_n,
+        "error_rate": error_n / items if items else 0.0,
+        "accuracy_excluding_errors": (
+            correct_count / non_error_items if non_error_items else 0.0
+        ),
+        "cost_per_correct_excluding_errors": (
+            cost_units_excluding_errors / max(correct_count, 1)
+            if cost_units_excluding_errors is not None
+            else None
+        ),
+        "wall_s_total": wall_s_total,
+        "wall_per_correct": wall_s_total / max(correct_count, 1),
+        "seeds_nominal": seeds_nominal,
+        "seeds_effective": seeds_effective,
     }
     if mode == "cascade_score":
         aggregate["total_large_prefill_tokens"] = sum(
@@ -2555,12 +2708,61 @@ def format_ratio(value):
     return "n/a" if value is None else "{:.6f}".format(value)
 
 
+def ratio_winner(value, baseline_mode, tree_mode):
+    if value is None or value == 1.0:
+        return None
+    return tree_mode if value > 1.0 else baseline_mode
+
+
+def print_integrity_metrics(mode, summary):
+    print("{}_error_n: {}".format(mode, summary["error_n"]))
+    print("{}_error_rate: {:.6%}".format(mode, summary["error_rate"]))
+    print(
+        "{}_accuracy_excluding_errors: {:.6%}".format(
+            mode, summary["accuracy_excluding_errors"]
+        )
+    )
+    print(
+        "{}_cost_per_correct_excluding_errors: {}".format(
+            mode,
+            (
+                "n/a"
+                if summary["cost_per_correct_excluding_errors"] is None
+                else "{:.6f}".format(
+                    summary["cost_per_correct_excluding_errors"]
+                )
+            ),
+        )
+    )
+    print("{}_wall_s_total: {:.6f}".format(mode, summary["wall_s_total"]))
+    print("{}_wall_per_correct: {:.6f}".format(mode, summary["wall_per_correct"]))
+    print(
+        "{}_seed_evidence: seeds_nominal={} seeds_effective={}".format(
+            mode, summary["seeds_nominal"], summary["seeds_effective"]
+        )
+    )
+    if summary["seeds_effective"] < summary["seeds_nominal"]:
+        print(
+            "FLAG: EFFECTIVE SEED COUNT: mode={} seeds_nominal={} "
+            "seeds_effective={}; nominal seeds are not independent evidence".format(
+                mode, summary["seeds_nominal"], summary["seeds_effective"]
+            )
+        )
+
+
 def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
     accuracy_delta_points = (
         tree_summary["accuracy"] - baseline["accuracy"]
     ) * 100.0
+    accuracy_excluding_errors_delta_points = (
+        tree_summary["accuracy_excluding_errors"]
+        - baseline["accuracy_excluding_errors"]
+    ) * 100.0
     cost_ratio = ratio(
         baseline["cost_per_correct"], tree_summary["cost_per_correct"]
+    )
+    wall_ratio = ratio(
+        baseline["wall_per_correct"], tree_summary["wall_per_correct"]
     )
     print(
         "{}_accuracy: {:.6%} ({}/{})".format(
@@ -2572,6 +2774,27 @@ def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
             tree_mode, mode, accuracy_delta_points
         )
     )
+    print_integrity_metrics(mode, baseline)
+    print(
+        "accuracy_excluding_errors_delta_{}_minus_{}: {:+.6f} pt".format(
+            tree_mode, mode, accuracy_excluding_errors_delta_points
+        )
+    )
+    error_rate_delta_points = abs(
+        tree_summary["error_rate"] - baseline["error_rate"]
+    ) * 100.0
+    if error_rate_delta_points > 5.0:
+        print(
+            "FLAG: ERROR RATE IMBALANCE: {} error_rate={:.6%} and {} "
+            "error_rate={:.6%} differ by {:.6f} pt; comparison is not apples "
+            "to apples".format(
+                tree_mode,
+                tree_summary["error_rate"],
+                mode,
+                baseline["error_rate"],
+                error_rate_delta_points,
+            )
+        )
     print("{}_total_small_tokens: {}".format(mode, baseline["total_small_tokens"]))
     print("{}_total_large_tokens: {}".format(mode, baseline["total_large_tokens"]))
     print("{}_total_cost_units: {:.6f}".format(mode, baseline["total_cost_units"]))
@@ -2581,6 +2804,24 @@ def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
             mode, tree_mode, format_ratio(cost_ratio)
         )
     )
+    print(
+        "wall_per_correct_ratio_{}_over_{}: {}".format(
+            mode, tree_mode, format_ratio(wall_ratio)
+        )
+    )
+    cost_winner = ratio_winner(cost_ratio, mode, tree_mode)
+    wall_winner = ratio_winner(wall_ratio, mode, tree_mode)
+    if (
+        cost_winner is not None
+        and wall_winner is not None
+        and cost_winner != wall_winner
+    ):
+        print(
+            "FLAG: COST/WALL REVERSAL: cost_per_correct favors {} but "
+            "wall_per_correct favors {} in {} versus {}".format(
+                cost_winner, wall_winner, tree_mode, mode
+            )
+        )
     if cost_ratio is None:
         conclusion = "cost-per-correct ratio is unavailable"
     elif cost_ratio > 1.0:
@@ -2686,6 +2927,7 @@ def compare_summaries(paths):
             tree_summary["items"],
         )
     )
+    print_integrity_metrics(tree_mode, tree_summary)
     print(
         "{}_total_small_tokens: {}".format(
             tree_mode, tree_summary["total_small_tokens"]
@@ -2895,6 +3137,11 @@ def build_parser():
     parser.add_argument("--out-jsonl", help="incremental per-item JSONL output")
     parser.add_argument("--out", help="final summary JSON output")
     parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="truncate --out-jsonl before starting a clean benchmark run",
+    )
+    parser.add_argument(
         "--compare",
         nargs="+",
         metavar="SUMMARY_JSON",
@@ -2965,12 +3212,25 @@ def validate_measurement_args(parser, args):
             os.path.abspath(args.out)
         ):
             parser.error("--out-jsonl and --out must be different paths")
+        if args.fresh and os.path.normcase(
+            os.path.abspath(args.out_jsonl)
+        ) == os.path.normcase(os.path.abspath(args.data)):
+            parser.error("--fresh --out-jsonl must differ from --data")
+        if (
+            args.fresh
+            and args.gate_model
+            and os.path.normcase(os.path.abspath(args.out_jsonl))
+            == os.path.normcase(os.path.abspath(args.gate_model))
+        ):
+            parser.error("--fresh --out-jsonl must differ from --gate-model")
 
 
 def main():
     parser = build_parser()
     args = parser.parse_args()
     args.small_model_defaulted = False
+    if args.fresh and (args.gate_selftest or args.compare or args.dry_run):
+        parser.error("--fresh requires a benchmark run")
     if args.mode == "spec_tree" and not args.small_model:
         args.small_model = DEFAULT_SPEC_TREE_SMALL_MODEL
         args.small_model_defaulted = True

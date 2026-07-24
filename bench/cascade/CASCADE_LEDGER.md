@@ -57,8 +57,10 @@ Per-item and summary cost is:
 
 Each mode and seed summary reports items, correct count, accuracy, raw small
 and large tokens, total cost units, cost per correct answer, mean wall time,
-and error count. Cascade summaries also report escalation count and rate.
-Cost per correct divides by max(correct_count, 1).
+wall_s_total, wall_per_correct, error_count, error_n, and error_rate. It also
+reports accuracy_excluding_errors and cost_per_correct_excluding_errors.
+Cascade summaries additionally report escalation count and rate. Cost per
+correct divides by max(correct_count, 1).
 
 A successful response with zero reported completion tokens is invalid. A
 missing or malformed token report is also invalid. Cascade additionally
@@ -81,7 +83,18 @@ decimals are canonicalized, so 18.0 equals 18.
 Each completed item is appended immediately to --out-jsonl under a write
 lock, then flushed and synced. Resume keys are (mode, seed, id). Existing
 valid keys are skipped. Invalid or truncated lines and duplicate keys are
-ignored with warnings. A missing final newline is repaired before appending.
+ignored with warnings. Duplicate records keep the first occurrence. The load
+warning is:
+
+    WARNING: MEASUREMENT INTEGRITY: dropped <n> duplicate record(s) by (mode, seed, id) while loading <path>
+
+Final summarization independently applies the same first-record-wins dedupe and
+prints:
+
+    WARNING: MEASUREMENT INTEGRITY: dropped <n> duplicate record(s) by (mode, seed, id) during final summarization for mode=<mode> seed=<seed>
+
+A missing final newline is repaired before appending. `--fresh` truncates
+`--out-jsonl`, flushes it, and syncs it before any resume load or item write.
 
 Use a fresh JSONL path whenever model, URL, data contents, branches, answer
 threshold, token limit, temperature, or cost weights change. Those settings
@@ -103,12 +116,38 @@ on port 30000 and the large chat server is on port 30001.
 
     python3 bench/cascade/measure_cascade.py --compare bench/cascade/cascade.json bench/cascade/large_bo8.json bench/cascade/large_greedy.json
 
-The comparison aggregates all seed rows. It prints accuracy deltas as cascade
-minus baseline, raw token totals, cost per correct, baseline-over-cascade cost
+The comparison aggregates all seed rows. It prints both as-scored and
+excluding-errors accuracy deltas as cascade minus baseline, raw token totals,
+cost per correct, wall seconds per correct, baseline-over-cascade cost and wall
 ratios, cascade escalation rate, and exact-number verdict lines. A ratio of
-4.0 means the named baseline cost four times as much per correct answer in
+4.0 means the named baseline used four times the metric per correct answer in
 that run. The verdict does not claim accuracy parity or generalize beyond the
 recorded data and configuration.
+
+## Measurement integrity hardening (2026-07-24)
+
+The historical `correct` field and as-scored accuracy are unchanged. Errored
+items remain incorrect for backward compatibility. The added excluding-errors
+accuracy removes errored items from the denominator. The added excluding-errors
+cost per correct also removes the cost of errored items from its numerator.
+
+`--compare` prints this flag when arm error rates differ by more than 5
+percentage points:
+
+    FLAG: ERROR RATE IMBALANCE: <tree> error_rate=<rate> and <baseline> error_rate=<rate> differ by <points> pt; comparison is not apples to apples
+
+Every summary records seeds_nominal and seeds_effective. For each nominal seed,
+the harness sorts records by id, hashes the resulting `(id, extracted,
+correct)` tuple list, and counts distinct hashes. It prints this flag when the
+count collapses:
+
+    FLAG: EFFECTIVE SEED COUNT: mode=<mode> seeds_nominal=<n> seeds_effective=<n>; nominal seeds are not independent evidence
+
+Every summary also records wall_s_total and wall_per_correct. `--compare`
+prints the wall ratio immediately after the cost ratio. When those ratios favor
+different arms it prints:
+
+    FLAG: COST/WALL REVERSAL: cost_per_correct favors <arm> but wall_per_correct favors <arm> in <tree> versus <baseline>
 
 ## CascadeTree target scoring upgrade (2026-07-23)
 

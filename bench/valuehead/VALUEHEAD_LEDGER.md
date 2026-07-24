@@ -40,6 +40,31 @@ Means and population standard deviations are saved in the model JSON. A zero sta
 - Input records whose `error` is not null are skipped during training. Predict mode preserves them and writes `p_small_correct: null`.
 - Reports print sample counts and show a LOW-DATA banner when usable n is below 100.
 
+## Train and evaluation separation
+
+`--holdout-ids <path>` accepts a JSONL file of objects or scalar ids, or a text
+file with one id per nonempty line. Matching ids are excluded before training,
+cross-validation, model fitting, and saved training-id metadata.
+
+`--check-leakage <eval-items.jsonl>` loads every eval id and compares it with
+the retained training ids. The check runs before model fitting or output
+writes. It refuses training with exit code 1 on any overlap and prints both the
+count line and refusal line:
+
+```text
+leakage_check: training_ids_n=<n> eval_ids_n=<n> overlap_count=<n>
+error: TRAIN/EVAL LEAKAGE REFUSAL: overlap_count=<n> eval=<path> sample_ids=<ids>
+```
+
+If any usable training row lacks an id, leakage checking also refuses because
+the separation cannot be proven. Saved models record unique `training_ids` and
+whether that list is complete. Predict mode intersects those saved ids with
+the prediction input ids and prints this warning when needed:
+
+```text
+WARNING: TRAIN/PREDICT LEAKAGE: overlap_count=<n> model=<path> input_paths=<paths> sample_ids=<ids>
+```
+
 ## Verified commands
 
 ```text
@@ -57,6 +82,11 @@ Verified demo result on 2026-07-23 with default seed 1729:
 - No server, GPU, sklearn, torch, or pytest was used
 
 A file-mode smoke test trained on 39 usable synthetic rows plus one skipped error row, wrote a model with all nine features, and scored 40 output rows as 39 numeric probabilities plus one null probability.
+
+Measurement-integrity self-checks on 2026-07-24 confirmed that a text holdout
+excluded its matching training row, and that a 3-id training file checked
+against a 2-id eval file with one shared id returned exit code 1, printed
+`overlap_count=1`, and wrote neither the model nor report output.
 
 ## Known limits
 

@@ -67,6 +67,58 @@ def nonnegative_number(value):
     return number if math.isfinite(number) and number >= 0.0 else None
 
 
+def normalize_problem_id(value):
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (str, int)):
+        normalized = str(value).strip()
+        return normalized or None
+    return None
+
+
+def record_problem_id(record):
+    return normalize_problem_id(record.get("id"))
+
+
+def load_problem_ids(path, allow_text):
+    ids = set()
+    with open(path, "r", encoding="utf-8-sig") as handle:
+        for line_number, raw_line in enumerate(handle, 1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                if not allow_text:
+                    raise ValueError(
+                        "invalid JSON in {} line {}: {}".format(
+                            path, line_number, exc
+                        )
+                    ) from exc
+                value = line
+            if isinstance(value, dict):
+                problem_id = record_problem_id(value)
+            else:
+                problem_id = normalize_problem_id(value)
+            if problem_id is None:
+                raise ValueError(
+                    "{} line {} does not contain a usable problem id".format(
+                        path, line_number
+                    )
+                )
+            ids.add(problem_id)
+    return ids
+
+
+def example_problem_ids(examples):
+    return {
+        example["problem_id"]
+        for example in examples
+        if example.get("problem_id") is not None
+    }
+
+
 def require_cascade_features(record, path, line_number):
     where = "{} line {}".format(path, line_number)
     if record.get("mode") != "cascade":
@@ -137,6 +189,7 @@ def training_example(record, path, line_number):
         raise ValueError("{} escalated and correct must be bool".format(where))
     details.update(
         {
+            "problem_id": record_problem_id(record),
             "features": features,
             "label": int(small_answer is not None and small_answer == gold),
             "escalated": escalated,
@@ -147,15 +200,20 @@ def training_example(record, path, line_number):
     return details
 
 
-def read_training_items(paths):
+def read_training_items(paths, holdout_ids=None):
+    holdout_ids = holdout_ids or set()
     examples = []
     source_stats = []
     total_count = 0
     skipped_error_count = 0
+    heldout_count = 0
+    missing_id_count = 0
     for path in paths:
         file_total = 0
         file_usable = 0
         file_skipped = 0
+        file_heldout = 0
+        file_missing_id = 0
         with open(path, "r", encoding="utf-8-sig") as handle:
             for line_number, raw_line in enumerate(handle, 1):
                 line = raw_line.strip()
@@ -175,11 +233,20 @@ def read_training_items(paths):
                     raise ValueError(
                         "{} line {} is not a JSON object".format(path, line_number)
                     )
+                problem_id = record_problem_id(record)
+                if problem_id in holdout_ids:
+                    file_heldout += 1
+                    heldout_count += 1
+                    continue
                 if record.get("error") is not None:
                     file_skipped += 1
                     skipped_error_count += 1
                     continue
-                examples.append(training_example(record, path, line_number))
+                example = training_example(record, path, line_number)
+                if problem_id is None:
+                    file_missing_id += 1
+                    missing_id_count += 1
+                examples.append(example)
                 file_usable += 1
         source_stats.append(
             {
@@ -187,12 +254,17 @@ def read_training_items(paths):
                 "total": file_total,
                 "usable": file_usable,
                 "skipped_error": file_skipped,
+                "heldout": file_heldout,
+                "missing_id": file_missing_id,
             }
         )
     return examples, {
         "total": total_count,
         "usable": len(examples),
         "skipped_error": skipped_error_count,
+        "heldout": heldout_count,
+        "missing_id": missing_id_count,
+        "holdout_ids_n": len(holdout_ids),
         "sources": source_stats,
     }
 
@@ -515,19 +587,39 @@ def build_report(
 ):
     lines = ["ESCALATION-GATE CALIBRATOR", "", "DATA"]
     lines.append(
-        "records: total_n={} usable_n={} skipped_error_n={}".format(
+        "records: total_n={} usable_n={} skipped_error_n={} heldout_n={} "
+        "missing_id_n={}".format(
             input_stats["total"],
             input_stats["usable"],
             input_stats["skipped_error"],
+            input_stats["heldout"],
+            input_stats["missing_id"],
         )
     )
     for source in input_stats["sources"]:
         lines.append(
-            "source: {} total_n={} usable_n={} skipped_error_n={}".format(
+            "source: {} total_n={} usable_n={} skipped_error_n={} heldout_n={} "
+            "missing_id_n={}".format(
                 source["path"],
                 source["total"],
                 source["usable"],
                 source["skipped_error"],
+                source["heldout"],
+                source["missing_id"],
+            )
+        )
+    lines.append(
+        "id_controls: holdout_ids_n={} training_ids_n={}".format(
+            input_stats["holdout_ids_n"], len(example_problem_ids(examples))
+        )
+    )
+    if input_stats.get("leakage_check") is not None:
+        leakage = input_stats["leakage_check"]
+        lines.append(
+            "leakage_check: eval_path={} eval_ids_n={} overlap_count={}".format(
+                leakage["eval_path"],
+                leakage["eval_ids_n"],
+                leakage["overlap_count"],
             )
         )
     positive_n = sum(labels)
@@ -729,6 +821,10 @@ def model_document(
                 "steps": GD_STEPS,
             },
             "input_paths": list(input_paths),
+            "training_ids": sorted(example_problem_ids(examples)),
+            "training_ids_complete": all(
+                example.get("problem_id") is not None for example in examples
+            ),
             "l2": args.l2,
             "l2_objective": "mean_log_loss + l2/(2*n)*sum(weights^2)",
             "small_cost": args.small_cost,
@@ -822,6 +918,34 @@ def train_and_report(examples, input_stats, args, input_paths):
     return model, report, rank_auc(labels, probabilities)
 
 
+def check_training_leakage(examples, input_stats, eval_path):
+    if input_stats["missing_id"]:
+        raise ValueError(
+            "TRAIN/EVAL LEAKAGE CHECK REFUSED: missing_training_id_count={}".format(
+                input_stats["missing_id"]
+            )
+        )
+    training_ids = example_problem_ids(examples)
+    eval_ids = load_problem_ids(eval_path, allow_text=False)
+    overlap = sorted(training_ids.intersection(eval_ids))
+    print(
+        "leakage_check: training_ids_n={} eval_ids_n={} overlap_count={}".format(
+            len(training_ids), len(eval_ids), len(overlap)
+        )
+    )
+    if overlap:
+        raise ValueError(
+            "TRAIN/EVAL LEAKAGE REFUSAL: overlap_count={} eval={} sample_ids={}".format(
+                len(overlap), eval_path, ",".join(overlap[:10])
+            )
+        )
+    return {
+        "eval_path": os.path.abspath(eval_path),
+        "eval_ids_n": len(eval_ids),
+        "overlap_count": 0,
+    }
+
+
 def load_model(path):
     with open(path, "r", encoding="utf-8") as handle:
         model = json.load(handle)
@@ -855,11 +979,23 @@ def load_model(path):
         value < 0.0 for value in stds
     ):
         raise ValueError("{} has non-finite parameters or negative stds".format(path))
-    return means, stds, intercept, weights
+    training = model.get("training")
+    raw_training_ids = (
+        training.get("training_ids", []) if isinstance(training, dict) else []
+    )
+    if not isinstance(raw_training_ids, list):
+        raise ValueError("{} has invalid training_ids metadata".format(path))
+    training_ids = set()
+    for value in raw_training_ids:
+        problem_id = normalize_problem_id(value)
+        if problem_id is None:
+            raise ValueError("{} has invalid training_ids metadata".format(path))
+        training_ids.add(problem_id)
+    return means, stds, intercept, weights, training_ids
 
 
 def score_items(model_path, item_paths, out_path):
-    means, stds, intercept, weights = load_model(model_path)
+    means, stds, intercept, weights, training_ids = load_model(model_path)
     input_abspaths = {
         os.path.normcase(os.path.abspath(path)) for path in item_paths
     }
@@ -870,6 +1006,7 @@ def score_items(model_path, item_paths, out_path):
     total_n = 0
     scored_n = 0
     input_error_n = 0
+    prediction_ids = set()
     with open(temporary, "w", encoding="utf-8", newline="\n") as output:
         for path in item_paths:
             with open(path, "r", encoding="utf-8-sig") as handle:
@@ -893,6 +1030,9 @@ def score_items(model_path, item_paths, out_path):
                             )
                         )
                     scored_record = dict(record)
+                    problem_id = record_problem_id(record)
+                    if problem_id is not None:
+                        prediction_ids.add(problem_id)
                     if record.get("error") is not None:
                         probability = None
                         input_error_n += 1
@@ -917,6 +1057,17 @@ def score_items(model_path, item_paths, out_path):
         output.flush()
         os.fsync(output.fileno())
     os.replace(temporary, out_path)
+    overlap = sorted(training_ids.intersection(prediction_ids))
+    if overlap:
+        print(
+            "WARNING: TRAIN/PREDICT LEAKAGE: overlap_count={} model={} "
+            "input_paths={} sample_ids={}".format(
+                len(overlap),
+                os.path.abspath(model_path),
+                ",".join(os.path.abspath(path) for path in item_paths),
+                ",".join(overlap[:10]),
+            )
+        )
     print(
         "prediction: total_n={} scored_n={} input_error_n={} field={} out={}".format(
             total_n,
@@ -1000,12 +1151,17 @@ def run_demo(args):
         "total": len(records),
         "usable": len(records),
         "skipped_error": 0,
+        "heldout": 0,
+        "missing_id": 0,
+        "holdout_ids_n": 0,
         "sources": [
             {
                 "path": "<synthetic-demo>",
                 "total": len(records),
                 "usable": len(records),
                 "skipped_error": 0,
+                "heldout": 0,
+                "missing_id": 0,
             }
         ],
     }
@@ -1033,6 +1189,16 @@ def build_parser():
     parser.add_argument("--items", nargs="+", help="cascade item JSONL path(s)")
     parser.add_argument("--out-model", help="trained model JSON output")
     parser.add_argument("--out-report", help="text report output")
+    parser.add_argument(
+        "--holdout-ids",
+        metavar="PATH",
+        help="JSONL or text file of problem ids to exclude from training",
+    )
+    parser.add_argument(
+        "--check-leakage",
+        metavar="EVAL_ITEMS_JSONL",
+        help="refuse training if any retained training id appears in this eval set",
+    )
     parser.add_argument(
         "--predict", metavar="MODEL_JSON", help="score items with a saved model"
     )
@@ -1069,6 +1235,8 @@ def validate_args(parser, args):
             or args.out_scored
             or args.out_model
             or args.out_report
+            or args.holdout_ids
+            or args.check_leakage
         ):
             parser.error("--demo cannot be combined with file input or output modes")
         return
@@ -1078,6 +1246,10 @@ def validate_args(parser, args):
         if args.out_model or args.out_report:
             parser.error(
                 "--predict cannot be combined with --out-model or --out-report"
+            )
+        if args.holdout_ids or args.check_leakage:
+            parser.error(
+                "--predict cannot be combined with --holdout-ids or --check-leakage"
             )
         return
     if not args.items or not args.out_model or not args.out_report:
@@ -1095,6 +1267,15 @@ def validate_args(parser, args):
     }
     if output_paths.intersection(item_paths):
         parser.error("training outputs must differ from every --items path")
+    control_paths = {
+        os.path.normcase(os.path.abspath(path))
+        for path in (args.holdout_ids, args.check_leakage)
+        if path
+    }
+    if output_paths.intersection(control_paths):
+        parser.error(
+            "training outputs must differ from --holdout-ids and --check-leakage"
+        )
 
 
 def main():
@@ -1108,7 +1289,22 @@ def main():
         if args.predict:
             score_items(args.predict, args.items, args.out_scored)
             return 0
-        examples, input_stats = read_training_items(args.items)
+        holdout_ids = (
+            load_problem_ids(args.holdout_ids, allow_text=True)
+            if args.holdout_ids
+            else set()
+        )
+        examples, input_stats = read_training_items(args.items, holdout_ids)
+        if args.holdout_ids:
+            print(
+                "holdout_ids: loaded_n={} excluded_n={} path={}".format(
+                    len(holdout_ids), input_stats["heldout"], args.holdout_ids
+                )
+            )
+        if args.check_leakage:
+            input_stats["leakage_check"] = check_training_leakage(
+                examples, input_stats, args.check_leakage
+            )
         model, report, _auc = train_and_report(
             examples, input_stats, args, args.items
         )
