@@ -82,7 +82,7 @@ def vote_key(answer):
 NUMBER_RE = re.compile(
     r"[-+]?\s*\$?\s*(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)\s*%?"
 )
-MODES = ("cascade", "large_bo8", "large_greedy", "cascade_score")
+MODES = ("cascade", "large_bo8", "large_greedy", "cascade_score", "large_tree")
 GATE_FEATURE_NAMES = (
     "leader_count",
     "voter_count",
@@ -264,6 +264,28 @@ def large_sample_body(args, item, base_seed, sample_index):
         "max_tokens": args.max_tokens,
         "temperature": args.temperature,
         "seed": sample_seed(base_seed, item, sample_index),
+    }
+
+
+def large_tree_body(args, item, base_seed):
+    """Tree request pointed at the LARGE model: fork/prune/vote/majority-lock
+    as a cheaper best-of-k on one capable model. No small model, no escalation.
+    Its own vote answer is the response; its decode tokens are charged at the
+    large-decode rate so cost-per-correct is directly comparable to large_bo8."""
+    tree = {
+        "policy": "beam",
+        "branches": args.branches,
+        "budget_tokens": args.branches * args.max_tokens,
+    }
+    if args.fork_at_entropy is not None:
+        tree["fork_at_entropy"] = args.fork_at_entropy
+    return {
+        "model": args.large_model,
+        "messages": prompt_messages(item),
+        "max_tokens": args.max_tokens,
+        "temperature": args.temperature,
+        "seed": item_seed(base_seed, item),
+        "tree": tree,
     }
 
 
@@ -722,6 +744,12 @@ def tree_winner_branch_id(payload):
     return None if value is None else str(value)
 
 
+def tree_pruned_count(payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("tree"), dict):
+        return None
+    return nonnegative_int(payload["tree"].get("pruned_count"))
+
+
 def ranked_branch_candidates(payload, branch_answers):
     counts = collections.Counter(
         answer for answer in branch_answers.values() if answer is not None
@@ -1147,6 +1175,50 @@ def run_large_greedy_item(args, item, base_seed):
     )
 
 
+def run_large_tree_item(args, item, base_seed):
+    started = time.perf_counter()
+    url = args.large_url.rstrip("/") + "/v1/tree/completions"
+    payload, request_error = post_json(
+        url, large_tree_body(args, item, base_seed), args.timeout
+    )
+    large_tokens, token_report_valid = tree_token_report(payload)
+    content, content_error = completion_content(payload)
+    answer = extract_answer(content)
+    (
+        branch_answers,
+        branch_leader,
+        leader_count,
+        voter_count,
+        branch_report_valid,
+    ) = branch_answer_report(payload)
+    errors = prefixed_errors(
+        "large_tree",
+        request_errors(request_error, content_error, large_tokens, token_report_valid),
+    )
+    if request_error is None and not branch_report_valid:
+        add_error(errors, "large_tree:invalid_branch_answers")
+    # All generated tokens are large-model decode tokens: charge via large_tokens
+    # so cost-per-correct is directly comparable to large_bo8.
+    record = common_record(
+        args, "large_tree", item, base_seed, started, answer, 0, large_tokens, errors
+    )
+    record.update(
+        {
+            "escalated": None,
+            "branch_answers": branch_answers,
+            "branch_answer_leader": branch_leader,
+            "leader_count": leader_count,
+            "voter_count": voter_count,
+            "leader_matches_winner": (
+                branch_leader is not None and answers_match(branch_leader, answer)
+            ),
+            "winner_branch_id": tree_winner_branch_id(payload),
+            "pruned_count": tree_pruned_count(payload),
+        }
+    )
+    return record
+
+
 def run_mode_item(args, item, base_seed):
     if args.mode == "cascade":
         return run_cascade_item(args, item, base_seed)
@@ -1154,6 +1226,8 @@ def run_mode_item(args, item, base_seed):
         return run_cascade_score_item(args, item, base_seed)
     if args.mode == "large_bo8":
         return run_large_bo8_item(args, item, base_seed)
+    if args.mode == "large_tree":
+        return run_large_tree_item(args, item, base_seed)
     return run_large_greedy_item(args, item, base_seed)
 
 
@@ -1946,6 +2020,10 @@ def print_dry_run(args, item, seed):
                 "url": large_base + "/v1/chat/completions",
                 "body": large_greedy_body(args, item, seed),
             },
+        },
+        "large_tree": {
+            "url": large_base + "/v1/tree/completions",
+            "body": large_tree_body(args, item, seed),
         },
         "large_bo8": [
             {
