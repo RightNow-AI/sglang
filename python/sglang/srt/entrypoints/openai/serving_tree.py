@@ -84,7 +84,9 @@ class OpenAIServingTree(OpenAIServingBase):
             chat_request, raw_request
         )
         base_request.return_logprob = True
-        base_request.return_text_in_logprobs = True
+        # The scheduler-side tree runtime consumes only numeric logprob values.
+        # Avoid detokenizing every returned logprob token in TokenizerManager.
+        base_request.return_text_in_logprobs = False
 
         tree_request = TreeGenerateReqInput(
             base=base_request,

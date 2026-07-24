@@ -76,7 +76,7 @@ def test_convert_tree_request_to_internal_envelope():
     assert adapted.base.input_ids == [11, 12, 13]
     assert adapted.base.stream is True
     assert adapted.base.return_logprob is True
-    assert adapted.base.return_text_in_logprobs is True
+    assert adapted.base.return_text_in_logprobs is False
     assert adapted.base.sampling_params == {
         "max_new_tokens": 37,
         "temperature": 0.25,
