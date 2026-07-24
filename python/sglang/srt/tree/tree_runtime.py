@@ -54,6 +54,10 @@ VALUE_MIN_KEEP = int(_os.environ.get('AUTOTREE_VALUE_MIN_KEEP', '2'))
 ADAPT_MARGIN = selection.env_float('AUTOTREE_ADAPT_MARGIN', 2.0)
 
 
+def _early_parent_stop_enabled() -> bool:
+    return _os.environ.get("AUTOTREE_EARLY_PARENT_STOP") == "1"
+
+
 def _validate_branch_count(params: Dict[str, Any]) -> int:
     branches = int(params.get('branches', 1) or 1)
     if branches > MAX_BRANCHES:
@@ -150,7 +154,7 @@ class _TreeRun:
         "orig_sampling", "forked", "fork_attempted", "cache_namespace",
         "fork_cache_supported", "shared_prefix_group", "entropy_logprobs",
         "entropy_lp_seen", "tail_snapshot_active", "finished_sibling_rids",
-        "fork_input_ids", "adaptive_failed",
+        "fork_input_ids", "adaptive_failed", "tail_tokens_saved",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -176,6 +180,7 @@ class _TreeRun:
         self.finished_sibling_rids = set()
         self.fork_input_ids = None
         self.adaptive_failed = False
+        self.tail_tokens_saved = 0
 
 
 class SchedulerTreeRuntime:
@@ -291,6 +296,13 @@ class SchedulerTreeRuntime:
         if req.rid != run.parent_rid:
             run.finished_sibling_rids.add(req.rid)
             run.tail_snapshot_active = True
+            # If the parent's newest token already streamed, wait for its next
+            # token so the final snapshot has a chunk to ride.
+            if (
+                _early_parent_stop_enabled()
+                and self._parent_has_unstreamed_token(run)
+            ):
+                self._maybe_stop_parent_early(run)
             return
         if not self._uses_delayed_fork(run) or run.forked:
             return
@@ -363,6 +375,79 @@ class SchedulerTreeRuntime:
         if original_max is not None:
             sp.max_new_tokens = original_max + 64
         sp.ignore_eos = True
+
+    def _parent_has_natural_eos(self, run: _TreeRun) -> bool:
+        parent = run.branches.get("0")
+        tokenizer = getattr(self.scheduler, "tokenizer", None)
+        eos = getattr(tokenizer, "eos_token_id", None)
+        return bool(
+            parent is not None
+            and parent.req is not None
+            and eos is not None
+            and eos in parent.req.output_ids
+        )
+
+    @staticmethod
+    def _parent_has_unstreamed_token(run: _TreeRun) -> bool:
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None:
+            return False
+        send_offset = getattr(parent.req, "send_token_offset", 0)
+        try:
+            return int(send_offset) < len(parent.req.output_ids)
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _all_siblings_finished(run: _TreeRun) -> bool:
+        sibling_count = len(run.branches) - 1
+        return (
+            sibling_count > 0
+            and len(run.finished_sibling_rids) >= sibling_count
+        )
+
+    def _maybe_stop_parent_early(self, run: _TreeRun) -> bool:
+        """Stop the held parent only after its vote and the outcome are final."""
+        if (
+            not _early_parent_stop_enabled()
+            or not self._parent_has_natural_eos(run)
+        ):
+            return False
+        if run.finalized:
+            return True
+
+        self._maybe_majority_lock(run)
+        if run.finalized:
+            return True
+        if not self._all_siblings_finished(run):
+            return False
+
+        self._finalize(run, reason="siblings_done")
+        return True
+
+    @staticmethod
+    def _record_parent_tail_tokens_saved(run: _TreeRun) -> None:
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None:
+            return
+        sampling_params = getattr(parent.req, "sampling_params", None)
+        parent_cap = getattr(sampling_params, "max_new_tokens", None)
+        if parent_cap is None:
+            return
+        generated = len(parent.req.output_ids)
+        try:
+            parent_cap = int(parent_cap)
+        except (TypeError, ValueError):
+            return
+        run.tail_tokens_saved = max(0, parent_cap - generated)
+        logger.info(
+            "[tree] %s early parent stop saved %d tail tokens "
+            "(cap=%d generated=%d)",
+            run.parent_rid,
+            run.tail_tokens_saved,
+            parent_cap,
+            generated,
+        )
 
     def _restore_parent_sampling(self, run: _TreeRun, parent_req: Any) -> None:
         sp = getattr(parent_req, "sampling_params", None)
@@ -695,6 +780,8 @@ class SchedulerTreeRuntime:
                 self._maybe_majority_lock(run)
 
         if state.branch_id == 0:
+            if self._maybe_stop_parent_early(run):
+                return
             # The finalize-time snapshot rides the parent's stream; when the
             # parent finishes (token cap) before the last sibling, that
             # snapshot has no chunk left to ride and the response ships
@@ -713,7 +800,8 @@ class SchedulerTreeRuntime:
                 if run.tail_snapshot_active:
                     self._attach_snapshot(run, include_outputs=True)
             if (
-                not run.finalized
+                not _early_parent_stop_enabled()
+                and not run.finalized
                 and len(run.branches) > 1
                 and _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") != "1"
             ):
@@ -763,6 +851,11 @@ class SchedulerTreeRuntime:
         the tree's outcome is decided - finalize immediately and reclaim every
         remaining token. Safe by construction with respect to the final vote."""
         if run.finalized:
+            return
+        if (
+            _early_parent_stop_enabled()
+            and not self._parent_has_natural_eos(run)
+        ):
             return
         adaptive_width = run.params.get("adaptive_width")
         if adaptive_width is None and len(run.branches) < 3:
@@ -891,6 +984,8 @@ class SchedulerTreeRuntime:
                 for b in run.branches.values()
             },
         }
+        if _early_parent_stop_enabled():
+            snapshot["tail_tokens_saved"] = run.tail_tokens_saved
         # The customized_info channel is token-aligned: the output streamer
         # slices the value list by the token range of each chunk. Place the
         # snapshot at the parent's newest token index (not yet streamed) so it
@@ -951,6 +1046,12 @@ class SchedulerTreeRuntime:
         active = [b for b in run.branches.values() if b.state == "active"]
         if not active:
             return
+        if (
+            _early_parent_stop_enabled()
+            and reason in {"majority_locked", "siblings_done"}
+            and self._parent_has_natural_eos(run)
+        ):
+            self._record_parent_tail_tokens_saved(run)
         # Self-consistency winner selection: the plurality answer across
         # finished branches beats confidence-argmax on reasoning tasks, so
         # vote first and use mean-logprob only to choose among the branches
