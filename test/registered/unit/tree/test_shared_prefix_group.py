@@ -6,7 +6,10 @@ from typing import Any, Optional
 
 import msgspec
 
-from sglang.srt.tree.shared_prefix import SharedPrefixGroup
+from sglang.srt.tree.shared_prefix import (
+    SharedPrefixGroup,
+    disable_shared_prefix_for_cuda_graph_replay,
+)
 from sglang.srt.tree.tree_runtime import (
     SchedulerTreeRuntime,
     TokenizedTreeGenerateReqInput,
@@ -170,3 +173,59 @@ def test_forward_batch_shared_prefix_groups_default_is_none():
 
     assert isinstance(field.value, ast.Constant)
     assert field.value.value is None
+
+
+def test_cuda_graph_replay_explicitly_disables_shared_prefix_groups():
+    group = SharedPrefixGroup(
+        rids=["parent", "parent#tree1"],
+        shared_len=32,
+        branch_ids=[0, 1],
+    )
+    forward_batch = SimpleNamespace(
+        rids=["parent", "parent#tree1"],
+        shared_prefix_groups=[group],
+    )
+
+    disable_shared_prefix_for_cuda_graph_replay(forward_batch)
+
+    assert forward_batch.rids == ["parent", "parent#tree1"]
+    assert forward_batch.shared_prefix_groups is None
+
+    runner_path = (
+        Path(__file__).resolve().parents[4]
+        / "python"
+        / "sglang"
+        / "srt"
+        / "model_executor"
+        / "runner"
+        / "decode_cuda_graph_runner.py"
+    )
+    module = ast.parse(runner_path.read_text(encoding="utf-8"))
+    runner = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "DecodeCudaGraphRunner"
+    )
+    execute = next(
+        node
+        for node in runner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "execute"
+    )
+    disable_line = next(
+        node.lineno
+        for node in ast.walk(execute)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "disable_shared_prefix_for_cuda_graph_replay"
+    )
+    replay_line = next(
+        node.lineno
+        for node in ast.walk(execute)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "replay"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "backend"
+    )
+
+    assert disable_line < replay_line

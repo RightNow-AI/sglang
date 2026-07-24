@@ -93,6 +93,9 @@ from sglang.srt.model_executor.runner_utils.deepep_adapter import (
 from sglang.srt.multiplex.pdmux_context import get_current_stream_idx, get_stream_groups
 from sglang.srt.runtime_context import get_flags, get_parallel
 from sglang.srt.speculative.ragged_verify import resolve_ragged_verify_layout
+from sglang.srt.tree.shared_prefix import (
+    disable_shared_prefix_for_cuda_graph_replay,
+)
 from sglang.srt.utils import (
     empty_context,
     get_available_gpu_memory,
@@ -1212,6 +1215,11 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         forward_batch: ForwardBatch,
         pp_proxy_tensors: Optional[PPProxyTensors] = None,
     ) -> Union[LogitsProcessorOutput, PPProxyTensors]:
+        # The capture-time ForwardBatch has rids=None, so its model forward was
+        # recorded with stock decode attention. Keep replay semantics explicit
+        # even when the runtime ForwardBatch carries AutoTree group metadata.
+        disable_shared_prefix_for_cuda_graph_replay(forward_batch)
+
         timer_ctx = (
             self.model_runner.device_timer.wrap(
                 metadata={"category": forward_batch.forward_mode.name.lower()}
