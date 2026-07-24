@@ -287,3 +287,113 @@ Additional focused checks:
 
 - The real small-tree and large-model endpoints were not called, so live service integration remains unverified.
 - A failed Python `tempfile` attempt created an empty untracked directory named `.cascade-gate-_o3wsxqm` at the worktree root with an ACL that this sandbox cannot inspect or remove. It contains no fixture files and does not appear in the tracked diff. The synthetic fixture files used for the successful checks were removed.
+
+## Outcome-level self-speculative search (2026-07-24)
+
+Lane: `feat/spectree`
+
+The `spec_tree` mode changes the target-model compute mode rather than merely
+reducing generated token count. A cheap drafter produces complete reasoning
+branches. The target scores every branch with teacher-forced prefill, selects
+the highest target mean log probability among branches with extractable
+answers, and decodes at most one greedy repair. The target never decodes N
+reasoning chains. This is the intended contrast with `large_bo8`, which spends
+N full target decodes on a memory-bandwidth-bound decode path.
+
+### Same-family coverage fix
+
+The previous cascade paired a Llama-3.1-8B drafter with a Qwen2.5-72B target.
+Measured coverage showed that the cross-family drafter never proposed roughly
+35 to 53 percent of the answers the target would produce. `spec_tree` therefore
+defaults `--small-model` to `Qwen/Qwen2.5-7B-Instruct`, matching the Qwen2.5
+family of the intended `Qwen/Qwen2.5-72B-Instruct-AWQ` target. An explicit
+`--small-model` still overrides the default. Same-family drafting is the
+coverage fix, not a cosmetic model choice.
+
+### Draft, verify, select, and repair paths
+
+Draft first sends `POST /v1/tree/completions` to the small server with the
+configured branch count, temperature, and maximum tokens. If the response
+contains N per-branch texts in `tree.branch_texts`,
+`tree.branch_continuations`, `tree.branch_outputs`, or text-bearing
+`tree.branches` entries, the record uses `draft_source: "tree"`. The current
+tree response is allowed to expose only winner content plus
+`tree.branch_answers`; when N texts are unavailable, the harness sends N
+concurrent independent `POST /v1/chat/completions` requests to the same-family
+small model and records `draft_source: "samples"`. Draft cost includes both the
+initial tree attempt and sample fallback work when both ran.
+
+Target verification prefers one request:
+
+    POST /v1/tree/verify
+    {
+      "model": "$LARGE_MODEL",
+      "prompt": "<prompt><ANSWER_SUFFIX>\n",
+      "continuations": ["<draft_0>", "<draft_1>", "..."]
+    }
+
+The harness accepts per-continuation rows carrying `mean_logprob` and
+`n_tokens`, or equivalent parallel score and token-count arrays. It records
+`verify_path: "batched"` and preserves every target score in draft order.
+
+Only an HTTP 404 switches verification to the native fallback. The fallback
+first calls `POST /v1/tokenize` on the target with the exact raw verification
+prompt. It then sends one concurrent `POST /generate` per continuation:
+
+    {
+      "text": "<prompt><ANSWER_SUFFIX>\n<continuation>",
+      "sampling_params": {"max_new_tokens": 0, "temperature": 0},
+      "return_logprob": true,
+      "logprob_start_len": "<exact tokenized prompt count>"
+    }
+
+This removes the older four-characters-per-token boundary approximation. The
+mean is taken over the returned continuation log probabilities, while the
+full `meta_info.prompt_tokens` count for each request is charged as target
+prefill. These records use `verify_path: "fallback"`.
+
+Selection considers only drafts with extractable answers and usable target
+scores. The highest target mean log probability wins, with the lower draft
+index breaking an exact score tie. One temperature-0 target chat completion is
+used when no draft has an extractable answer, the top two usable target scores
+are within `--repair-margin` nats, or a draft or verifier failure prevents safe
+selection. The default repair margin is `0.05`. Records state `repaired` and
+`repair_reason`; `chosen_index` remains the best scored draft index when one
+was available before repair.
+
+### Cost accounting and records
+
+Each item records the three cost-bearing token classes independently:
+
+    draft_tokens * small_cost
+    + verify_prefill_tokens * large_prefill_cost
+    + repair_tokens * large_cost
+
+The defaults remain `small_cost=1.0`, `large_prefill_cost=2.0`, and
+`large_cost=10.0`. `draft_tokens` also populates `small_tokens`,
+`verify_prefill_tokens` also populates `large_prefill_tokens`, and
+`repair_tokens` also populates `large_tokens`, so summaries and cost per
+correct remain comparable with `large_bo8`. Records additionally include
+`draft_answers`, `target_scores`, `target_score_tokens`, `chosen_index`,
+`repaired`, `verify_path`, `draft_source`, token-source breakdowns, and
+nonfatal path diagnostics. Summary rows report repair count and repair rate.
+For `spec_tree`, the shared summary table's `ESC_RATE` column displays that
+repair rate.
+`--compare` accepts `spec_tree` in the first, tree-mode position and compares
+it with `large_bo8`, `large_greedy`, or both.
+
+### Dry-run proof and uncertainty
+
+The no-network dry run used an in-memory item, branches=2, max_tokens=16, the
+default Qwen2.5 7B drafter, and a Qwen2.5 72B AWQ target. It printed the tree
+draft body, both independent-sample fallback bodies, the single batched verify
+body, the tokenize plus two native verification fallback bodies, and the one
+greedy repair body. The native bodies showed
+`sampling_params.max_new_tokens=0`, `return_logprob=true`, and
+`logprob_start_len=<tokenized_prompt_count>`.
+
+The `/v1/tree/verify` route is being added by another lane and is not present
+in this worktree, so its live response envelope remains unverified here. The
+parser accepts the expected `mean_logprob` and `n_tokens` forms, but the exact
+merged route response still needs an orchestrator canary. No GPU endpoint was
+called, no pytest command was run, and no commit or push was performed.

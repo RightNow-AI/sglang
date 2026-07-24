@@ -82,7 +82,15 @@ def vote_key(answer):
 NUMBER_RE = re.compile(
     r"[-+]?\s*\$?\s*(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)\s*%?"
 )
-MODES = ("cascade", "large_bo8", "large_greedy", "cascade_score", "large_tree")
+MODES = (
+    "cascade",
+    "large_bo8",
+    "large_greedy",
+    "cascade_score",
+    "large_tree",
+    "spec_tree",
+)
+DEFAULT_SPEC_TREE_SMALL_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 GATE_FEATURE_NAMES = (
     "leader_count",
     "voter_count",
@@ -296,6 +304,45 @@ def large_greedy_body(args, item, base_seed):
         "max_tokens": args.max_tokens,
         "temperature": 0.0,
         "seed": item_seed(base_seed, item),
+    }
+
+
+def small_sample_body(args, item, base_seed, sample_index):
+    return {
+        "model": args.small_model,
+        "messages": prompt_messages(item),
+        "max_tokens": args.max_tokens,
+        "temperature": args.temperature,
+        "seed": sample_seed(base_seed, item, sample_index),
+    }
+
+
+def spec_tree_verify_prompt(item):
+    return item["prompt"] + answer_suffix() + "\n"
+
+
+def spec_tree_verify_body(args, item, continuations):
+    return {
+        "model": args.large_model,
+        "prompt": spec_tree_verify_prompt(item),
+        "continuations": continuations,
+    }
+
+
+def spec_tree_tokenize_body(args, item):
+    return {
+        "model": args.large_model,
+        "prompt": spec_tree_verify_prompt(item),
+        "add_special_tokens": True,
+    }
+
+
+def spec_tree_native_verify_body(item, continuation, prompt_tokens):
+    return {
+        "text": spec_tree_verify_prompt(item) + continuation,
+        "sampling_params": {"max_new_tokens": 0, "temperature": 0},
+        "return_logprob": True,
+        "logprob_start_len": prompt_tokens,
     }
 
 
@@ -666,6 +713,63 @@ def completion_content(payload):
     return content, None
 
 
+def branch_id_sort_key(branch_id):
+    text = str(branch_id)
+    try:
+        return 0, int(text), text
+    except ValueError:
+        return 1, text, text
+
+
+def branch_text_value(value):
+    if isinstance(value, str):
+        return value if value else None
+    if not isinstance(value, dict):
+        return None
+    for key in ("text", "content", "continuation", "output_text"):
+        text = value.get(key)
+        if isinstance(text, str) and text:
+            return text
+    message = value.get("message")
+    if isinstance(message, dict):
+        text = message.get("content")
+        if isinstance(text, str) and text:
+            return text
+    return None
+
+
+def branch_text_report(payload):
+    if not isinstance(payload, dict):
+        return {}
+    tree = payload.get("tree")
+    containers = [tree, payload] if isinstance(tree, dict) else [payload]
+    for container in containers:
+        for key in ("branch_texts", "branch_continuations", "branch_outputs"):
+            raw = container.get(key)
+            texts = {}
+            if isinstance(raw, dict):
+                for branch_id, value in raw.items():
+                    text = branch_text_value(value)
+                    if text is not None:
+                        texts[str(branch_id)] = text
+            elif isinstance(raw, list):
+                for branch_id, value in enumerate(raw):
+                    text = branch_text_value(value)
+                    if text is not None:
+                        texts[str(branch_id)] = text
+            if texts:
+                return texts
+    if isinstance(tree, dict) and isinstance(tree.get("branches"), dict):
+        texts = {}
+        for branch_id, value in tree["branches"].items():
+            text = branch_text_value(value)
+            if text is not None:
+                texts[str(branch_id)] = text
+        if texts:
+            return texts
+    return {}
+
+
 def tree_token_report(payload):
     if not isinstance(payload, dict):
         return 0, False
@@ -842,6 +946,157 @@ def add_error(errors, error):
         errors.append(error)
 
 
+def first_mapping_value(mapping, names):
+    if not isinstance(mapping, dict):
+        return None
+    for name in names:
+        if name in mapping:
+            return mapping[name]
+    return None
+
+
+def batched_verify_report(payload, expected_count):
+    errors = []
+    scores = []
+    token_counts = []
+    rows = first_mapping_value(payload, ("scores", "results", "verifications"))
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                score = finite_number(
+                    first_mapping_value(
+                        row, ("mean_logprob", "target_mean_logprob", "score")
+                    )
+                )
+                count = nonnegative_int(
+                    first_mapping_value(row, ("n_tokens", "token_count", "tokens"))
+                )
+            else:
+                score = finite_number(row)
+                count = None
+            scores.append(score)
+            token_counts.append(count)
+    else:
+        raw_scores = first_mapping_value(
+            payload, ("mean_logprobs", "target_scores")
+        )
+        if isinstance(raw_scores, list):
+            scores = [finite_number(value) for value in raw_scores]
+            token_counts = [None] * len(scores)
+
+    raw_counts = first_mapping_value(payload, ("n_tokens", "token_counts"))
+    total_tokens = None
+    if isinstance(raw_counts, list):
+        parsed_counts = [nonnegative_int(value) for value in raw_counts]
+        if len(parsed_counts) == len(token_counts):
+            token_counts = [
+                parsed if existing is None else existing
+                for existing, parsed in zip(token_counts, parsed_counts)
+            ]
+        else:
+            add_error(errors, "n_tokens_length_mismatch")
+    else:
+        total_tokens = nonnegative_int(raw_counts)
+    if total_tokens is None:
+        total_tokens = nonnegative_int(
+            first_mapping_value(payload, ("total_n_tokens", "total_tokens"))
+        )
+    if total_tokens is None and token_counts and all(
+        count is not None for count in token_counts
+    ):
+        total_tokens = sum(token_counts)
+
+    if len(scores) != expected_count:
+        add_error(
+            errors,
+            "score_count_mismatch_expected_{}_got_{}".format(
+                expected_count, len(scores)
+            ),
+        )
+    if any(score is None for score in scores):
+        add_error(errors, "invalid_mean_logprob")
+    if total_tokens is None:
+        add_error(errors, "missing_n_tokens")
+        total_tokens = 0
+    elif expected_count and total_tokens == 0:
+        add_error(errors, "zero_n_tokens")
+
+    scores = (scores + [None] * expected_count)[:expected_count]
+    token_counts = (token_counts + [None] * expected_count)[:expected_count]
+    return {
+        "scores": scores,
+        "token_counts": token_counts,
+        "total_tokens": total_tokens,
+        "errors": errors,
+    }
+
+
+def run_tokenize_count_request(url, body, timeout):
+    payload, request_error = post_json(url, body, timeout)
+    errors = []
+    add_error(errors, request_error)
+    count = (
+        nonnegative_int(payload.get("count")) if isinstance(payload, dict) else None
+    )
+    if request_error is None and count is None:
+        add_error(errors, "missing_tokenize_count")
+    return count, errors
+
+
+def input_logprob_value(entry):
+    if isinstance(entry, (list, tuple)) and entry:
+        return finite_number(entry[0])
+    if isinstance(entry, dict):
+        return finite_number(first_mapping_value(entry, ("logprob", "value")))
+    return finite_number(entry)
+
+
+def run_native_verify_request(url, body, timeout):
+    payload, request_error = post_json(url, body, timeout)
+    meta_info = payload.get("meta_info") if isinstance(payload, dict) else None
+    raw_logprobs = (
+        meta_info.get("input_token_logprobs")
+        if isinstance(meta_info, dict)
+        else None
+    )
+    n_tokens = (
+        nonnegative_int(meta_info.get("prompt_tokens"))
+        if isinstance(meta_info, dict)
+        else None
+    )
+    errors = []
+    add_error(errors, request_error)
+    if request_error is None and not isinstance(meta_info, dict):
+        add_error(errors, "missing_meta_info")
+    if n_tokens is None:
+        add_error(errors, "missing_prompt_tokens")
+        n_tokens = 0
+    elif n_tokens == 0:
+        add_error(errors, "zero_prompt_tokens")
+    values = []
+    if not isinstance(raw_logprobs, list) or not raw_logprobs:
+        add_error(errors, "missing_input_token_logprobs")
+    else:
+        for entry in raw_logprobs:
+            value = input_logprob_value(entry)
+            if value is None:
+                add_error(errors, "non_numeric_input_token_logprob")
+                break
+            values.append(value)
+    return {
+        "score": sum(values) / len(values) if not errors and values else None,
+        "n_tokens": n_tokens,
+        "raw_logprob_length": len(raw_logprobs) if isinstance(raw_logprobs, list) else 0,
+        "errors": errors,
+    }
+
+
+def request_may_have_spent_tokens(request_error):
+    if not request_error:
+        return False
+    return not request_error.startswith(("http_400:", "http_404:", "http_422:"))
+
+
 def request_errors(request_error, content_error, tokens, token_report_valid):
     errors = []
     add_error(errors, request_error)
@@ -859,6 +1114,20 @@ def run_chat_request(url, body, timeout):
     tokens, token_report_valid = chat_token_report(payload)
     content, content_error = completion_content(payload)
     return {
+        "answer": extract_answer(content),
+        "tokens": tokens,
+        "errors": request_errors(
+            request_error, content_error, tokens, token_report_valid
+        ),
+    }
+
+
+def run_chat_text_request(url, body, timeout):
+    payload, request_error = post_json(url, body, timeout)
+    tokens, token_report_valid = chat_token_report(payload)
+    content, content_error = completion_content(payload)
+    return {
+        "content": content,
         "answer": extract_answer(content),
         "tokens": tokens,
         "errors": request_errors(
@@ -1219,6 +1488,279 @@ def run_large_tree_item(args, item, base_seed):
     return record
 
 
+def run_spec_tree_draft(args, item, base_seed):
+    tree_url = args.small_url.rstrip("/") + "/v1/tree/completions"
+    payload, request_error = post_json(
+        tree_url, small_tree_body(args, item, base_seed), args.timeout
+    )
+    tree_tokens, tree_token_report_valid = tree_token_report(payload)
+    branch_texts = branch_text_report(payload)
+    branch_answers = branch_answer_report(payload)[0]
+    ordered_branch_ids = sorted(branch_texts, key=branch_id_sort_key)
+    draft_errors = []
+    fatal_errors = []
+    add_error(draft_errors, request_error)
+    if request_error is None:
+        if tree_tokens == 0:
+            add_error(draft_errors, "tree:zero_tokens")
+            add_error(fatal_errors, "draft:tree_cost_unknown_zero_tokens")
+        elif not tree_token_report_valid:
+            add_error(draft_errors, "tree:invalid_token_report")
+            add_error(fatal_errors, "draft:tree_cost_unknown_invalid_report")
+    elif request_may_have_spent_tokens(request_error):
+        add_error(fatal_errors, "draft:tree_cost_unknown_after_request_error")
+
+    if len(ordered_branch_ids) >= args.branches:
+        draft_source = "tree"
+        branch_ids = ordered_branch_ids[: args.branches]
+        continuations = [branch_texts[branch_id] for branch_id in branch_ids]
+        draft_answers = [
+            extract_answer(text) or branch_answers.get(branch_id)
+            for branch_id, text in zip(branch_ids, continuations)
+        ]
+        sample_tokens = 0
+    else:
+        draft_source = "samples"
+        branch_ids = [str(index) for index in range(args.branches)]
+        add_error(
+            draft_errors,
+            "tree:branch_texts_unavailable_expected_{}_got_{}".format(
+                args.branches, len(ordered_branch_ids)
+            ),
+        )
+        sample_url = args.small_url.rstrip("/") + "/v1/chat/completions"
+
+        def run_sample(sample_index):
+            return run_chat_text_request(
+                sample_url,
+                small_sample_body(args, item, base_seed, sample_index),
+                args.timeout,
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=args.branches
+        ) as executor:
+            futures = [
+                executor.submit(run_sample, index) for index in range(args.branches)
+            ]
+            samples = [future.result() for future in futures]
+
+        continuations = []
+        draft_answers = []
+        sample_tokens = 0
+        for sample_index, sample in enumerate(samples):
+            continuations.append(sample["content"])
+            draft_answers.append(sample["answer"])
+            sample_tokens += sample["tokens"]
+            for error in prefixed_errors(
+                "sample_{}".format(sample_index), sample["errors"]
+            ):
+                add_error(draft_errors, error)
+                add_error(fatal_errors, "draft:" + error)
+
+    return {
+        "continuations": continuations,
+        "draft_answers": draft_answers,
+        "draft_source": draft_source,
+        "branch_ids": branch_ids,
+        "tree_tokens": tree_tokens,
+        "sample_tokens": sample_tokens,
+        "draft_tokens": tree_tokens + sample_tokens,
+        "draft_errors": draft_errors,
+        "fatal_errors": fatal_errors,
+    }
+
+
+def run_spec_tree_verify(args, item, continuations):
+    target_scores = [None] * len(continuations)
+    target_score_tokens = [None] * len(continuations)
+    verify_errors = []
+    fatal_errors = []
+    valid = [
+        (index, continuation)
+        for index, continuation in enumerate(continuations)
+        if isinstance(continuation, str) and continuation
+    ]
+    verify_path = "batched"
+    verify_prefill_tokens = 0
+    if not valid:
+        add_error(verify_errors, "selection:no_draft_continuations")
+        add_error(fatal_errors, "verify:no_draft_continuations")
+        return {
+            "target_scores": target_scores,
+            "target_score_tokens": target_score_tokens,
+            "verify_prefill_tokens": verify_prefill_tokens,
+            "verify_path": verify_path,
+            "verify_errors": verify_errors,
+            "fatal_errors": fatal_errors,
+        }
+
+    batched_url = args.large_url.rstrip("/") + "/v1/tree/verify"
+    batched_body = spec_tree_verify_body(
+        args, item, [continuation for _index, continuation in valid]
+    )
+    payload, request_error = post_json(batched_url, batched_body, args.timeout)
+    if request_error and request_error.startswith("http_404:"):
+        add_error(verify_errors, "batched:" + request_error)
+        verify_path = "fallback"
+        tokenize_url = args.large_url.rstrip("/") + "/v1/tokenize"
+        prompt_tokens, tokenize_errors = run_tokenize_count_request(
+            tokenize_url, spec_tree_tokenize_body(args, item), args.timeout
+        )
+        for error in prefixed_errors("tokenize", tokenize_errors):
+            add_error(verify_errors, error)
+            add_error(fatal_errors, "verify:" + error)
+        if prompt_tokens is not None and not tokenize_errors:
+            native_url = args.large_url.rstrip("/") + "/generate"
+
+            def run_continuation(continuation):
+                return run_native_verify_request(
+                    native_url,
+                    spec_tree_native_verify_body(
+                        item, continuation, prompt_tokens
+                    ),
+                    args.timeout,
+                )
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(valid)
+            ) as executor:
+                futures = [
+                    executor.submit(run_continuation, continuation)
+                    for _index, continuation in valid
+                ]
+                results = [future.result() for future in futures]
+            for (draft_index, _continuation), result in zip(valid, results):
+                target_scores[draft_index] = result["score"]
+                target_score_tokens[draft_index] = result["n_tokens"]
+                verify_prefill_tokens += result["n_tokens"]
+                for error in prefixed_errors(
+                    "continuation_{}".format(draft_index), result["errors"]
+                ):
+                    add_error(verify_errors, error)
+                    add_error(fatal_errors, "verify:" + error)
+    else:
+        add_error(verify_errors, request_error)
+        if request_error is not None:
+            add_error(fatal_errors, "verify:batched:" + request_error)
+        else:
+            report = batched_verify_report(payload, len(valid))
+            verify_prefill_tokens = report["total_tokens"]
+            for (draft_index, _continuation), score, count in zip(
+                valid, report["scores"], report["token_counts"]
+            ):
+                target_scores[draft_index] = score
+                target_score_tokens[draft_index] = count
+            for error in report["errors"]:
+                add_error(verify_errors, "batched:" + error)
+                add_error(fatal_errors, "verify:batched:" + error)
+
+    return {
+        "target_scores": target_scores,
+        "target_score_tokens": target_score_tokens,
+        "verify_prefill_tokens": verify_prefill_tokens,
+        "verify_path": verify_path,
+        "verify_errors": verify_errors,
+        "fatal_errors": fatal_errors,
+    }
+
+
+def run_spec_tree_item(args, item, base_seed):
+    started = time.perf_counter()
+    draft = run_spec_tree_draft(args, item, base_seed)
+    verify = run_spec_tree_verify(args, item, draft["continuations"])
+    errors = list(draft["fatal_errors"])
+    for error in verify["fatal_errors"]:
+        add_error(errors, error)
+
+    extractable = [
+        index
+        for index, answer in enumerate(draft["draft_answers"])
+        if answer is not None
+    ]
+    ranked = sorted(
+        (
+            index
+            for index in extractable
+            if verify["target_scores"][index] is not None
+        ),
+        key=lambda index: (-verify["target_scores"][index], index),
+    )
+    chosen_index = ranked[0] if ranked else None
+    repair_reason = None
+    if not extractable:
+        repair_reason = "no_extractable_draft"
+    elif draft["fatal_errors"]:
+        repair_reason = "draft_error"
+    elif verify["fatal_errors"]:
+        repair_reason = "verify_error"
+    elif chosen_index is None:
+        repair_reason = "no_scored_extractable_draft"
+    elif len(ranked) >= 2:
+        score_gap = (
+            verify["target_scores"][ranked[0]]
+            - verify["target_scores"][ranked[1]]
+        )
+        if score_gap <= args.repair_margin:
+            repair_reason = "top_two_within_margin"
+
+    repaired = repair_reason is not None
+    repair_tokens = 0
+    repair_errors = []
+    if repaired:
+        repair_url = args.large_url.rstrip("/") + "/v1/chat/completions"
+        repair = run_chat_request(
+            repair_url, large_greedy_body(args, item, base_seed), args.timeout
+        )
+        repair_tokens = repair["tokens"]
+        answer = repair["answer"]
+        for error in prefixed_errors("repair", repair["errors"]):
+            add_error(repair_errors, error)
+            add_error(errors, error)
+    else:
+        answer = draft["draft_answers"][chosen_index]
+    if answer is None:
+        add_error(errors, "selection:no_final_answer")
+
+    record = common_record(
+        args,
+        "spec_tree",
+        item,
+        base_seed,
+        started,
+        answer,
+        draft["draft_tokens"],
+        repair_tokens,
+        errors,
+    )
+    record["large_prefill_tokens"] = verify["verify_prefill_tokens"]
+    record["total_cost_units"] += (
+        verify["verify_prefill_tokens"] * args.large_prefill_cost
+    )
+    record.update(
+        {
+            "draft_tokens": draft["draft_tokens"],
+            "verify_prefill_tokens": verify["verify_prefill_tokens"],
+            "repair_tokens": repair_tokens,
+            "tree_draft_tokens": draft["tree_tokens"],
+            "sample_draft_tokens": draft["sample_tokens"],
+            "draft_answers": draft["draft_answers"],
+            "target_scores": verify["target_scores"],
+            "target_score_tokens": verify["target_score_tokens"],
+            "chosen_index": chosen_index,
+            "repaired": repaired,
+            "repair_reason": repair_reason,
+            "verify_path": verify["verify_path"],
+            "draft_source": draft["draft_source"],
+            "draft_branch_ids": draft["branch_ids"],
+            "draft_errors": draft["draft_errors"],
+            "verify_errors": verify["verify_errors"],
+            "repair_errors": repair_errors,
+        }
+    )
+    return record
+
+
 def run_mode_item(args, item, base_seed):
     if args.mode == "cascade":
         return run_cascade_item(args, item, base_seed)
@@ -1228,6 +1770,8 @@ def run_mode_item(args, item, base_seed):
         return run_large_bo8_item(args, item, base_seed)
     if args.mode == "large_tree":
         return run_large_tree_item(args, item, base_seed)
+    if args.mode == "spec_tree":
+        return run_spec_tree_item(args, item, base_seed)
     return run_large_greedy_item(args, item, base_seed)
 
 
@@ -1284,6 +1828,29 @@ def error_record(args, item, base_seed, exc):
             }
         )
         add_gate_fields(record, args, None)
+    elif args.mode == "spec_tree":
+        record.update(
+            {
+                "large_prefill_tokens": 0,
+                "draft_tokens": 0,
+                "verify_prefill_tokens": 0,
+                "repair_tokens": 0,
+                "tree_draft_tokens": 0,
+                "sample_draft_tokens": 0,
+                "draft_answers": [],
+                "target_scores": [],
+                "target_score_tokens": [],
+                "chosen_index": None,
+                "repaired": False,
+                "repair_reason": None,
+                "verify_path": "batched",
+                "draft_source": "tree",
+                "draft_branch_ids": [],
+                "draft_errors": ["internal_error:draft_not_completed"],
+                "verify_errors": ["internal_error:verify_not_completed"],
+                "repair_errors": [],
+            }
+        )
     elif args.mode == "large_bo8":
         record["sample_answers"] = []
     return record
@@ -1399,6 +1966,99 @@ def valid_resume_record(record):
         ):
             if not isinstance(record.get(field), dict):
                 return False
+    if key[0] == "spec_tree":
+        spec_tree_fields = (
+            "large_prefill_tokens",
+            "draft_tokens",
+            "verify_prefill_tokens",
+            "repair_tokens",
+            "tree_draft_tokens",
+            "sample_draft_tokens",
+            "draft_answers",
+            "target_scores",
+            "target_score_tokens",
+            "chosen_index",
+            "repaired",
+            "repair_reason",
+            "verify_path",
+            "draft_source",
+            "draft_branch_ids",
+            "draft_errors",
+            "verify_errors",
+            "repair_errors",
+        )
+        if any(field not in record for field in spec_tree_fields):
+            return False
+        for field in (
+            "large_prefill_tokens",
+            "draft_tokens",
+            "verify_prefill_tokens",
+            "repair_tokens",
+            "tree_draft_tokens",
+            "sample_draft_tokens",
+        ):
+            if nonnegative_int(record.get(field)) is None:
+                return False
+        if (
+            record.get("small_tokens") != record.get("draft_tokens")
+            or record.get("large_tokens") != record.get("repair_tokens")
+            or record.get("large_prefill_tokens")
+            != record.get("verify_prefill_tokens")
+            or record.get("draft_tokens")
+            != record.get("tree_draft_tokens")
+            + record.get("sample_draft_tokens")
+        ):
+            return False
+        draft_answers = record.get("draft_answers")
+        target_scores = record.get("target_scores")
+        target_score_tokens = record.get("target_score_tokens")
+        if (
+            not isinstance(draft_answers, list)
+            or not isinstance(target_scores, list)
+            or not isinstance(target_score_tokens, list)
+            or len(draft_answers) != len(target_scores)
+            or len(draft_answers) != len(target_score_tokens)
+        ):
+            return False
+        if any(
+            answer is not None and not isinstance(answer, str)
+            for answer in draft_answers
+        ):
+            return False
+        if any(
+            score is not None and finite_number(score) is None
+            for score in target_scores
+        ):
+            return False
+        if any(
+            count is not None and nonnegative_int(count) is None
+            for count in target_score_tokens
+        ):
+            return False
+        chosen_index = record.get("chosen_index")
+        if chosen_index is not None and (
+            nonnegative_int(chosen_index) is None
+            or chosen_index >= len(draft_answers)
+        ):
+            return False
+        if (
+            not isinstance(record.get("repaired"), bool)
+            or record.get("verify_path") not in ("batched", "fallback")
+            or record.get("draft_source") not in ("tree", "samples")
+        ):
+            return False
+        if record.get("repair_reason") is not None and not isinstance(
+            record.get("repair_reason"), str
+        ):
+            return False
+        for field in (
+            "draft_branch_ids",
+            "draft_errors",
+            "verify_errors",
+            "repair_errors",
+        ):
+            if not isinstance(record.get(field), list):
+                return False
     gate_fields = ("gate_p", "gate_threshold", "gated")
     if any(field in record for field in gate_fields):
         if any(field not in record for field in gate_fields):
@@ -1489,6 +2149,9 @@ def summarize(args, seed, records):
     if args.mode == "cascade_score":
         total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
         total_cost_units += total_large_prefill_tokens * args.large_prefill_cost
+    elif args.mode == "spec_tree":
+        total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
+        total_cost_units += total_large_prefill_tokens * args.large_prefill_cost
     else:
         total_cost_units = item_cost(args, total_small_tokens, total_large_tokens)
     wall_times = [nonnegative_number(record.get("wall_s")) or 0.0 for record in records]
@@ -1507,6 +2170,21 @@ def summarize(args, seed, records):
     }
     if args.mode == "cascade_score":
         summary["total_large_prefill_tokens"] = total_large_prefill_tokens
+    elif args.mode == "spec_tree":
+        summary["total_large_prefill_tokens"] = total_large_prefill_tokens
+        observed = [
+            record["repaired"]
+            for record in records
+            if isinstance(record.get("repaired"), bool)
+        ]
+        repaired_count = sum(value is True for value in observed)
+        summary.update(
+            {
+                "repaired_count": repaired_count,
+                "repair_observed_items": len(observed),
+                "repair_rate": repaired_count / len(observed) if observed else 0.0,
+            }
+        )
     if args.mode in ("cascade", "cascade_score"):
         observed = [
             record["escalated"]
@@ -1533,6 +2211,8 @@ def print_summary_table(summaries):
     )
     for row in summaries:
         escalation_rate = row.get("escalation_rate")
+        if row["mode"] == "spec_tree":
+            escalation_rate = row.get("repair_rate")
         print(
             "{mode:<13} {seed:>5} {items:>6} {correct:>8} {accuracy:>9.2%} "
             "{escalation:>9} {small:>13} {large:>13} {cost:>11.3f} "
@@ -1556,6 +2236,12 @@ def print_summary_table(summaries):
         if row["mode"] == "cascade_score":
             print(
                 "cascade_score_seed_{}_large_prefill_tokens: {}".format(
+                    row["seed"], row["total_large_prefill_tokens"]
+                )
+            )
+        elif row["mode"] == "spec_tree":
+            print(
+                "spec_tree_seed_{}_large_prefill_tokens: {}".format(
                     row["seed"], row["total_large_prefill_tokens"]
                 )
             )
@@ -1699,6 +2385,14 @@ def run_benchmark(args, items, seeds):
     }
     if args.mode == "cascade_score":
         output["config"]["large_prefill_cost"] = args.large_prefill_cost
+    elif args.mode == "spec_tree":
+        output["config"].update(
+            {
+                "large_prefill_cost": args.large_prefill_cost,
+                "repair_margin": args.repair_margin,
+                "small_model_defaulted": args.small_model_defaulted,
+            }
+        )
     if args.gate_model:
         output["config"].update(
             {
@@ -1762,6 +2456,26 @@ def aggregate_summaries(rows, mode):
             nonnegative_int(row.get("total_large_prefill_tokens")) or 0
             for row in rows
         )
+    elif mode == "spec_tree":
+        aggregate["total_large_prefill_tokens"] = sum(
+            nonnegative_int(row.get("total_large_prefill_tokens")) or 0
+            for row in rows
+        )
+        repaired_count = sum(
+            nonnegative_int(row.get("repaired_count")) or 0 for row in rows
+        )
+        observed_items = sum(
+            nonnegative_int(row.get("repair_observed_items")) or 0 for row in rows
+        )
+        aggregate.update(
+            {
+                "repaired_count": repaired_count,
+                "repair_observed_items": observed_items,
+                "repair_rate": (
+                    repaired_count / observed_items if observed_items else 0.0
+                ),
+            }
+        )
     if mode in ("cascade", "cascade_score"):
         escalated_count = sum(
             nonnegative_int(row.get("escalated_count")) or 0 for row in rows
@@ -1817,7 +2531,7 @@ def compare_config_mismatches(documents):
         modes = {
             row.get("mode")
             for row in summary_rows(document)
-            if row.get("mode") in ("cascade", "cascade_score")
+            if row.get("mode") in ("cascade", "cascade_score", "spec_tree")
         }
         if modes:
             tree_configs.append(config)
@@ -1875,23 +2589,42 @@ def print_comparison(mode, baseline, tree_summary, tree_mode="cascade"):
         conclusion = "{} is not cheaper per correct in this run".format(tree_mode)
     else:
         conclusion = "cost per correct is equal in this run"
-    print(
-        "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
-        "baseline cost/correct {:.6f}, {} accuracy delta {:+.6f} pt, {} "
-        "escalation rate {:.6%}".format(
-            mode,
-            conclusion,
-            tree_mode,
-            format_ratio(cost_ratio),
-            tree_mode,
-            tree_summary["cost_per_correct"],
-            baseline["cost_per_correct"],
-            tree_mode,
-            accuracy_delta_points,
-            tree_mode,
-            tree_summary["escalation_rate"],
+    if tree_mode == "spec_tree":
+        print(
+            "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
+            "baseline cost/correct {:.6f}, {} accuracy delta {:+.6f} pt, {} "
+            "repair rate {:.6%}".format(
+                mode,
+                conclusion,
+                tree_mode,
+                format_ratio(cost_ratio),
+                tree_mode,
+                tree_summary["cost_per_correct"],
+                baseline["cost_per_correct"],
+                tree_mode,
+                accuracy_delta_points,
+                tree_mode,
+                tree_summary["repair_rate"],
+            )
         )
-    )
+    else:
+        print(
+            "verdict_{}: {}; baseline/{} ratio {}, {} cost/correct {:.6f}, "
+            "baseline cost/correct {:.6f}, {} accuracy delta {:+.6f} pt, {} "
+            "escalation rate {:.6%}".format(
+                mode,
+                conclusion,
+                tree_mode,
+                format_ratio(cost_ratio),
+                tree_mode,
+                tree_summary["cost_per_correct"],
+                baseline["cost_per_correct"],
+                tree_mode,
+                accuracy_delta_points,
+                tree_mode,
+                tree_summary["escalation_rate"],
+            )
+        )
 
 
 def compare_summaries(paths):
@@ -1904,8 +2637,10 @@ def compare_summaries(paths):
     if len(first_modes) != 1:
         raise ValueError("first summary JSON must contain exactly one mode")
     tree_mode = next(iter(first_modes))
-    if tree_mode not in ("cascade", "cascade_score"):
-        raise ValueError("first summary mode must be 'cascade' or 'cascade_score'")
+    if tree_mode not in ("cascade", "cascade_score", "spec_tree"):
+        raise ValueError(
+            "first summary mode must be 'cascade', 'cascade_score', or 'spec_tree'"
+        )
     expected_modes = [tree_mode]
     for document in documents[1:]:
         baseline_modes = {
@@ -1967,6 +2702,12 @@ def compare_summaries(paths):
                 tree_summary["total_large_prefill_tokens"]
             )
         )
+    elif tree_mode == "spec_tree":
+        print(
+            "spec_tree_total_large_prefill_tokens: {}".format(
+                tree_summary["total_large_prefill_tokens"]
+            )
+        )
     print(
         "{}_total_cost_units: {:.6f}".format(
             tree_mode, tree_summary["total_cost_units"]
@@ -1977,11 +2718,16 @@ def compare_summaries(paths):
             tree_mode, tree_summary["cost_per_correct"]
         )
     )
-    print(
-        "{}_escalation_rate: {:.6%}".format(
-            tree_mode, tree_summary["escalation_rate"]
+    if tree_mode == "spec_tree":
+        print(
+            "spec_tree_repair_rate: {:.6%}".format(tree_summary["repair_rate"])
         )
-    )
+    else:
+        print(
+            "{}_escalation_rate: {:.6%}".format(
+                tree_mode, tree_summary["escalation_rate"]
+            )
+        )
     for mode in expected_modes[1:]:
         print_comparison(mode, aggregates[mode], tree_summary, tree_mode)
 
@@ -1989,6 +2735,9 @@ def compare_summaries(paths):
 def print_dry_run(args, item, seed):
     small_base = args.small_url.rstrip("/")
     large_base = args.large_url.rstrip("/")
+    draft_placeholders = [
+        "<draft_{}>".format(index) for index in range(args.branches)
+    ]
     document = {
         "item_id": item["id"],
         "item_index": item["item_index"],
@@ -2037,6 +2786,42 @@ def print_dry_run(args, item, seed):
             "url": large_base + "/v1/chat/completions",
             "body": large_greedy_body(args, item, seed),
         },
+        "spec_tree": {
+            "draft_tree": {
+                "url": small_base + "/v1/tree/completions",
+                "body": small_tree_body(args, item, seed),
+            },
+            "draft_samples_if_branch_texts_unavailable": [
+                {
+                    "sample_index": sample_index,
+                    "url": small_base + "/v1/chat/completions",
+                    "body": small_sample_body(args, item, seed, sample_index),
+                }
+                for sample_index in range(args.branches)
+            ],
+            "verify_batched": {
+                "url": large_base + "/v1/tree/verify",
+                "body": spec_tree_verify_body(args, item, draft_placeholders),
+            },
+            "verify_fallback_tokenize": {
+                "url": large_base + "/v1/tokenize",
+                "body": spec_tree_tokenize_body(args, item),
+            },
+            "verify_fallback_generate": [
+                {
+                    "draft_index": draft_index,
+                    "url": large_base + "/generate",
+                    "body": spec_tree_native_verify_body(
+                        item, continuation, "<tokenized_prompt_count>"
+                    ),
+                }
+                for draft_index, continuation in enumerate(draft_placeholders)
+            ],
+            "repair_if_needed": {
+                "url": large_base + "/v1/chat/completions",
+                "body": large_greedy_body(args, item, seed),
+            },
+        },
     }
     if args.gate_model:
         document["gate"] = {
@@ -2055,7 +2840,13 @@ def build_parser():
     )
     parser.add_argument("--data", help="GSM8K-style JSONL input")
     parser.add_argument("--mode", choices=MODES)
-    parser.add_argument("--small-model", help="served small model name")
+    parser.add_argument(
+        "--small-model",
+        help=(
+            "served small model name; spec_tree defaults to "
+            + DEFAULT_SPEC_TREE_SMALL_MODEL
+        ),
+    )
     parser.add_argument("--large-model", help="served large model name")
     parser.add_argument("--small-url", default="http://127.0.0.1:30000")
     parser.add_argument("--large-url", default="http://127.0.0.1:30001")
@@ -2088,7 +2879,13 @@ def build_parser():
         "--large-prefill-cost",
         type=float,
         default=2.0,
-        help="large-model prefill cost units per token for cascade_score",
+        help="large-model prefill cost units per token for target verification",
+    )
+    parser.add_argument(
+        "--repair-margin",
+        type=float,
+        default=0.05,
+        help="spec_tree top-two target-score margin in nats that triggers repair",
     )
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--seeds", default="0")
@@ -2102,14 +2899,14 @@ def build_parser():
         nargs="+",
         metavar="SUMMARY_JSON",
         help=(
-            "compare cascade or cascade_score JSON with one or both of "
+            "compare cascade, cascade_score, or spec_tree JSON with one or both of "
             "large_bo8 and large_greedy JSON"
         ),
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="print all four modes' request bodies for the first selected item",
+        help="print every mode's request bodies for the first selected item",
     )
     return parser
 
@@ -2147,6 +2944,8 @@ def validate_measurement_args(parser, args):
         parser.error("--large-cost must be nonnegative")
     if args.large_prefill_cost < 0:
         parser.error("--large-prefill-cost must be nonnegative")
+    if not math.isfinite(args.repair_margin) or args.repair_margin < 0:
+        parser.error("--repair-margin must be finite and nonnegative")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if args.concurrency <= 0:
@@ -2171,6 +2970,10 @@ def validate_measurement_args(parser, args):
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    args.small_model_defaulted = False
+    if args.mode == "spec_tree" and not args.small_model:
+        args.small_model = DEFAULT_SPEC_TREE_SMALL_MODEL
+        args.small_model_defaulted = True
     if args.gate_selftest:
         if args.compare:
             parser.error("--gate-selftest cannot be combined with --compare")
