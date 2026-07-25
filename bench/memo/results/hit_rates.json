@@ -1,0 +1,27 @@
+{
+ "repeated identical queries (FAQ)": {
+  "n": 500,
+  "hit_rate": 0.9,
+  "implied_speedup": 10.0
+ },
+ "multi-turn agent conversation": {
+  "n": 400,
+  "hit_rate": 0.0,
+  "implied_speedup": 1.0
+ },
+ "ReAct tool loop": {
+  "n": 400,
+  "hit_rate": 0.0,
+  "implied_speedup": 1.0
+ },
+ "RL rollouts, G samples x epochs": {
+  "n": 1600,
+  "hit_rate": 0.9688,
+  "implied_speedup": 32.0
+ },
+ "paraphrased same-intent queries": {
+  "n": 500,
+  "hit_rate": 0.58,
+  "implied_speedup": 2.38
+ }
+}
