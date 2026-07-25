@@ -32,6 +32,17 @@ class TreeParameters(BaseModel):
     branches: int = Field(gt=0)
     budget_tokens: int = Field(gt=0)
     scorer: str | None = None
+    # Fork triggers and adaptive width. The engine accepts all of these; when
+    # they are not declared here extra="forbid" rejects a valid request before
+    # it is ever sent.
+    fork_at_text: str | None = None
+    fork_at_entropy: float | None = Field(default=None, gt=0)
+    adaptive_width: int | None = Field(default=None, gt=0)
+    # Consensus pruning knobs. Engine defaults are 64 / 32 / 2; None means
+    # "let the engine decide" so the SDK does not pin defaults that drift.
+    consensus_warmup: NonNegativeInt | None = None
+    consensus_interval: int | None = Field(default=None, gt=0)
+    min_survivors: int | None = Field(default=None, gt=0)
 
 
 class Usage(BaseModel):
@@ -65,6 +76,11 @@ class TreeSummary(BaseModel):
     final_scores: dict[str, float]
     scorer: str | None
     kv_reuse_ratio: float | None = Field(ge=1)
+    # The engine ALWAYS sends these three. Without them declared,
+    # extra="forbid" rejected every production response.
+    branch_answers: dict[str, str | None] = Field(default_factory=dict)
+    served_from_memo: bool = False
+    memo_key: str | None = None
 
     @model_validator(mode="after")
     def validate_branches(self) -> "TreeSummary":
