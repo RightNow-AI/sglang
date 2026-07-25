@@ -21,6 +21,33 @@ if sys.platform == "win32" and "resource" not in sys.modules:
     sys.modules["resource"] = resource
 
 
+# Triton has no Windows wheel, and sglang.srt.utils.common imports it
+# transitively via io_struct -> lora_registry -> utils. The tree_api suite only
+# needs the pure-Python serving layer, so stub the pieces that are imported for
+# their names rather than their behavior. Same approach as the `resource` stub
+# above. Without this the whole suite errors at collection on Windows and has
+# therefore never run here.
+# The tree_api suite imports the full serving stack, which reaches
+# sglang.srt.utils.common and from there torch._dynamo's triton integration.
+# Triton publishes no Windows wheel. Stubbing it deeply enough to satisfy
+# torch._dynamo was attempted and abandoned: each stub revealed another
+# attribute torch probes, and a stub elaborate enough to pass would no longer
+# be testing anything real.
+#
+# So this suite is Linux-only by dependency, and says so instead of erroring at
+# collection with four confusing ModuleNotFoundErrors. CI runs on ubuntu-latest
+# where it executes normally. The tree/ suite is unaffected: it shims only the
+# pure-Python radix layer and runs everywhere.
+if sys.platform == "win32":
+    import pytest
+
+    pytest.skip(
+        "tree_api requires the full serving stack (triton has no Windows "
+        "wheel); this suite runs on Linux CI",
+        allow_module_level=True,
+    )
+
+
 if sys.platform == "win32":
     python_root = Path(__file__).resolve().parents[4] / "python"
 
