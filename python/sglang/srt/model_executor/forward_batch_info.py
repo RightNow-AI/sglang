@@ -771,7 +771,7 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
                 with _autotree_profile_span("forward_batch.shared_prefix_groups"):
                     try:
                         from sglang.srt.tree.tree_runtime import (
-                            get_active as _autotree_get_active,
+                            peek_active as _autotree_get_active,
                         )
 
                         _autotree_runtime = _autotree_get_active()
@@ -796,7 +796,7 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
             else:
                 try:
                     from sglang.srt.tree.tree_runtime import (
-                        get_active as _autotree_get_active,
+                        peek_active as _autotree_get_active,
                     )
 
                     _autotree_runtime = _autotree_get_active()

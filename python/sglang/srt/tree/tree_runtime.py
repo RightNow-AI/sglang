@@ -1455,7 +1455,26 @@ if _AUTOTREE_PROFILE_ENABLED:
 _ACTIVE: Optional[SchedulerTreeRuntime] = None
 
 
+def peek_active() -> Optional[SchedulerTreeRuntime]:
+    """Return the live runtime WITHOUT reaping. Safe from any thread.
+
+    get_active() reaps departed parents, which finalizes runs and mutates
+    runtime.runs. That is scheduler-thread work. Under SGLang's default overlap
+    scheduler the model forward runs on a different thread, so a forward-thread
+    caller that reaps races the scheduler thread over the same dict.
+
+    Callers that only need to READ tree state (for example the shared-prefix
+    group lookup during ForwardBatch construction) must use this instead.
+    """
+    return _ACTIVE
+
+
 def get_active() -> Optional[SchedulerTreeRuntime]:
+    """Reap departed parents, then return the runtime if any run is live.
+
+    SCHEDULER THREAD ONLY. This mutates runtime.runs through _cleanup_run.
+    Use peek_active() from the forward thread.
+    """
     runtime = _ACTIVE
     if runtime is None:
         return None
