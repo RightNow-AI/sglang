@@ -31,6 +31,7 @@ tree_package.TreeResult = TreeResult
 tree_package.TreeSummary = TreeSummary
 
 from sglang.srt.entrypoints.openai.serving_tree import OpenAIServingTree  # noqa: E402
+import sglang.srt.entrypoints.openai.serving_tree as serving_tree_module  # noqa: E402
 from sglang.test.ci.ci_register import register_cpu_ci  # noqa: E402
 
 
@@ -168,3 +169,52 @@ def test_coerce_plain_result_ignores_empty_branch_outputs_when_voting():
     assert result.summary.winner_branch_id == "2"
     assert result.winner_text == "reasoning, answer #### 42"
     assert result.summary.scorer == "self_consistency"
+
+
+def test_empty_memo_entry_limit_uses_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOTREE_MEMO_PATH", str(tmp_path / "memo.jsonl"))
+    monkeypatch.setenv("AUTOTREE_MEMO_MAX_ENTRIES", "")
+
+    store = OpenAIServingTree._create_memo_store()
+
+    assert store.max_entries == 10000
+
+
+def test_single_branch_tree_does_not_enable_logprob_work(monkeypatch):
+    monkeypatch.setattr(
+        serving_tree_module,
+        "ChatCompletionRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+    base = SimpleNamespace(return_logprob=True, return_text_in_logprobs=True)
+    serving = OpenAIServingTree.__new__(OpenAIServingTree)
+    serving.chat_serving = SimpleNamespace(
+        _convert_to_internal_request=lambda *_args: (base, None)
+    )
+    request = SimpleNamespace(
+        model="model",
+        messages=[SimpleNamespace(model_dump=lambda: {"role": "user", "content": "x"})],
+        resolved_max_tokens=16,
+        temperature=1.0,
+        top_p=1.0,
+        stop=None,
+        resolved_seed=0,
+        stream=False,
+        stream_options=None,
+        user=None,
+        tree=SimpleNamespace(
+            policy="beam",
+            branches=1,
+            budget_tokens=16,
+            scorer=None,
+            fork_at_text=None,
+            fork_at_entropy=None,
+            adaptive_width=None,
+        ),
+    )
+
+    adapted, _ = serving._convert_to_internal_request(request)
+
+    assert adapted.base is base
+    assert base.return_logprob is False
+    assert base.return_text_in_logprobs is False

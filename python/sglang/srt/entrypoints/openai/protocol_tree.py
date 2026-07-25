@@ -23,10 +23,10 @@ class TreeChatMessage(BaseModel):
 
 
 class TreeParameters(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     policy: TreePolicy
-    branches: int = Field(ge=1, le=64)
+    branches: int = Field(ge=1, le=MAX_BRANCHES)
     budget_tokens: int = Field(ge=1, le=1_000_000)
     scorer: Optional[str] = None
     fork_at_text: Optional[str] = Field(default=None, min_length=1, max_length=64)

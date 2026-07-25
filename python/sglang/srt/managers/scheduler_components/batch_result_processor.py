@@ -183,6 +183,7 @@ class SchedulerBatchResultProcessor:
         result: Union[GenerationBatchResult, EmbeddingBatchResult],
     ):
         skip_stream_req = None
+        tree_runtime = None
 
         if self.is_generation:
             if result.copy_done is not None:
@@ -236,6 +237,7 @@ class SchedulerBatchResultProcessor:
                     from sglang.srt.tree.tree_runtime import get_active as _tr_get  # [autotree-splice]
                     tr = _tr_get()
                     if tr is not None:
+                        tree_runtime = tr
                         tr.on_prefill_done(req)
 
                     req.update_finish_state()
@@ -340,8 +342,15 @@ class SchedulerBatchResultProcessor:
                     req.inflight_middle_chunks -= 1
                     req.time_stats.set_last_chunked_prefill_finish_time()
 
+        output_reqs = batch.reqs
+        if tree_runtime is not None:
+            output_reqs = [
+                req
+                for req in batch.reqs
+                if not tree_runtime.should_defer_parent_output(req)
+            ]
         self.output_streamer.stream_output(
-            batch.reqs, batch.return_logprob, skip_stream_req
+            output_reqs, batch.return_logprob, skip_stream_req
         )
 
         can_run_cuda_graph = result.can_run_cuda_graph
@@ -576,6 +585,10 @@ class SchedulerBatchResultProcessor:
         # delayed result is processed. Use the draft token count recorded on result.
         stride = result.speculative_num_draft_tokens
         assert stride is not None, "spec-v2 result missing speculative_num_draft_tokens"
+        from sglang.srt.tree.tree_runtime import get_active as _tr_get_budget
+
+        tree_runtime = _tr_get_budget()
+        budget_reservations = {}
 
         for i, req in enumerate(batch.reqs):
             accept_tokens = next_token_ids[i * stride : i * stride + accept_lens[i]]
@@ -592,12 +605,30 @@ class SchedulerBatchResultProcessor:
                     # grammar.finished.
                     accept_tokens = self._accept_grammar_tokens(req, accept_tokens)
 
+                if tree_runtime is not None:
+                    run = tree_runtime.branch_index.get(req.rid)
+                    reservation_key = id(run) if run is not None else None
+                    reserved = budget_reservations.get(reservation_key, 0)
+                    accept_tokens, _ = tree_runtime.trim_tokens_to_budget(
+                        req,
+                        accept_tokens,
+                        reserved=reserved,
+                    )
+                    if reservation_key is not None:
+                        budget_reservations[reservation_key] = reserved + len(
+                            accept_tokens
+                        )
+
                 # Commit the full accepted run (drafts + bonus).
                 num_accept_tokens = len(accept_tokens)
                 req.kv_committed_len += num_accept_tokens
                 req.spec_verify_ct += 1
 
-                num_correct_drafts = result.num_correct_drafts_per_req_cpu[i]
+                num_correct_drafts = min(
+                    result.num_correct_drafts_per_req_cpu[i],
+                    max(0, num_accept_tokens - 1),
+                )
+                result.num_correct_drafts_per_req_cpu[i] = num_correct_drafts
                 req.spec_num_correct_drafts += num_correct_drafts
                 req.update_spec_correct_drafts_histogram(num_correct_drafts)
 
@@ -609,6 +640,7 @@ class SchedulerBatchResultProcessor:
 
             predict_tokens.append(accept_tokens)
 
+        result.num_correct_drafts = sum(result.num_correct_drafts_per_req_cpu)
         return predict_tokens
 
     def _accept_grammar_tokens(
@@ -695,6 +727,7 @@ class SchedulerBatchResultProcessor:
             )
 
         self.token_to_kv_pool_allocator.free_group_begin()
+        tree_runtime = None
 
         for i, req in enumerate(batch.reqs):
             req: Req
@@ -711,9 +744,24 @@ class SchedulerBatchResultProcessor:
             next_token_id = next_token_ids[i]
             is_spec = not batch.spec_algorithm.is_none()
 
-            req.output_ids.extend(next_token_id)
             from sglang.srt.tree.tree_runtime import get_active as _tr_get2  # [autotree-splice-decode]
             _tr = _tr_get2()
+            if _tr is not None:
+                tree_runtime = _tr
+                current_logprobs = (
+                    next_token_logprobs[i]
+                    if next_token_logprobs is not None
+                    else None
+                )
+                next_token_id, current_logprobs = _tr.trim_tokens_to_budget(
+                    req,
+                    next_token_id,
+                    current_logprobs,
+                )
+                next_token_ids[i] = next_token_id
+                if next_token_logprobs is not None:
+                    next_token_logprobs[i] = current_logprobs
+            req.output_ids.extend(next_token_id)
             if _tr is not None:
                 _tr.on_token(req, next_token_id, next_token_logprobs[i] if next_token_logprobs is not None else None)
             new_accept_len = len(next_token_id)
@@ -760,7 +808,14 @@ class SchedulerBatchResultProcessor:
                     self._accept_grammar_tokens(req, next_token_id)
                 req.grammar.finished = req.finished()
 
-        self.output_streamer.stream_output(batch.reqs, batch.return_logprob)
+        output_reqs = batch.reqs
+        if tree_runtime is not None:
+            output_reqs = [
+                req
+                for req in batch.reqs
+                if not tree_runtime.should_defer_parent_output(req)
+            ]
+        self.output_streamer.stream_output(output_reqs, batch.return_logprob)
         self.token_to_kv_pool_allocator.free_group_end()
 
         self.metrics_reporter.forward_ct_decode = (

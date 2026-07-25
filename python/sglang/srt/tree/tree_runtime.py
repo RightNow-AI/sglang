@@ -14,12 +14,11 @@ allocator exhaustion, retraction, finish, and release follow the non-tree
 paths. Fan-out is rejected before intake above AUTOTREE_MAX_BRANCHES (64 by
 default) to bound per-request pressure.
 
-For multi-branch runs the parent is retained past natural EOS by setting
-ignore_eos and adding 64 tokens to its limit. Normal tree finalization marks
-every branch to finish. If the client aborts, or the retained parent otherwise
-finishes first, cleanup marks every remaining child to finish and forgets all
-runtime references; the scheduler then releases their KV through its normal
-finish path.
+For multi-branch runs the parent finishes under the caller's original sampling
+limits. Its final wire output is deferred until sibling selection completes,
+while the stock finish path releases its KV immediately. Normal finalization
+marks every remaining branch to finish. Client abort cleanup resolves a deferred
+parent response, finishes every child, and forgets all runtime references.
 """
 
 from __future__ import annotations
@@ -32,6 +31,7 @@ from collections import deque
 from typing import Any, Dict, Optional
 
 from sglang.srt.tree import selection
+from sglang.srt.tree.params import normalize_tree_params, validate_tree_params
 from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
 from sglang.srt.tree.profile import incr as _autotree_profile_incr
 from sglang.srt.tree.profile import span as _autotree_profile_span
@@ -41,44 +41,29 @@ logger = logging.getLogger(__name__)
 
 # Intake and marginal-value scheduling knobs are environment-overridable so
 # operators can bound tenant fan-out and run policy ablations without edits.
-MAX_BRANCHES = int(_os.environ.get('AUTOTREE_MAX_BRANCHES', '64'))
+MAX_BRANCHES = selection.env_int("AUTOTREE_MAX_BRANCHES", 64)
 ENTROPY_FORK_WINDOW_SIZE = 8
 # Entropy-triggered runs must eventually fork even when the chosen-logprob
 # proxy stays confident. The budget-derived cap may raise this floor.
 ENTROPY_FORK_STARVATION_MIN_TOKENS = 64
-VALUE_CHECK_INTERVAL = int(_os.environ.get('AUTOTREE_VALUE_CHECK_INTERVAL', '16'))
-VALUE_WARMUP_TOKENS = int(_os.environ.get('AUTOTREE_VALUE_WARMUP_TOKENS', '8'))
-# Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
-# minority-correct branches (accuracy loss); the naive logprob proxy
-# cannot separate branches more finely. Lower this only with a scorer
-# stronger than mean logprob (value head).
-VALUE_MARGIN = selection.env_float('AUTOTREE_VALUE_MARGIN', 0.8)
-VALUE_MIN_KEEP = int(_os.environ.get('AUTOTREE_VALUE_MIN_KEEP', '2'))
-ADAPT_MARGIN = selection.env_float('AUTOTREE_ADAPT_MARGIN', 2.0)
-
-
 def _early_parent_stop_enabled() -> bool:
     return _os.environ.get("AUTOTREE_EARLY_PARENT_STOP") == "1"
 
 
 def _validate_branch_count(params: Dict[str, Any]) -> int:
-    branches = int(params.get('branches', 1) or 1)
+    validate_tree_params(params)
+    branches = params["branches"]
     if branches > MAX_BRANCHES:
         raise ValueError(
-            f'tree branches={branches} exceeds configured maximum='
-            f'{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)'
+            f"tree branches={branches} exceeds configured maximum="
+            f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
         )
     adaptive_width = params.get("adaptive_width")
-    if adaptive_width is not None:
-        if not isinstance(adaptive_width, int) or isinstance(adaptive_width, bool):
-            raise ValueError("adaptive_width must be an integer")
-        if adaptive_width <= branches:
-            raise ValueError("adaptive_width must be greater than branches")
-        if adaptive_width > MAX_BRANCHES:
-            raise ValueError(
-                f"adaptive_width={adaptive_width} exceeds configured maximum="
-                f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
-            )
+    if adaptive_width is not None and adaptive_width > MAX_BRANCHES:
+        raise ValueError(
+            f"adaptive_width={adaptive_width} exceeds configured maximum="
+            f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
+        )
     return branches
 
 
@@ -93,10 +78,10 @@ class TokenizedTreeGenerateReqInput:
     _OWN = ("base", "tree")
 
     def __init__(self, base: Any, tree: Dict[str, Any]) -> None:
-        params = dict(tree)
+        params = normalize_tree_params(tree)
         _validate_branch_count(params)
         object.__setattr__(self, "base", base)
-        object.__setattr__(self, "tree", dict(tree))
+        object.__setattr__(self, "tree", params)
 
     def __getattr__(self, name: str):
         return getattr(object.__getattribute__(self, "base"), name)
@@ -113,20 +98,19 @@ class TokenizedTreeGenerateReqInput:
 # when the proxy is actually flowing (all-zero scores never prune).
 # Env-overridable so ablations (prune off = large margin) need no code edit.
 
-VALUE_CHECK_INTERVAL = int(_os.environ.get("AUTOTREE_VALUE_CHECK_INTERVAL", "16"))
-VALUE_WARMUP_TOKENS = int(_os.environ.get("AUTOTREE_VALUE_WARMUP_TOKENS", "8"))
+VALUE_CHECK_INTERVAL = selection.env_int("AUTOTREE_VALUE_CHECK_INTERVAL", 16)
+VALUE_WARMUP_TOKENS = selection.env_int("AUTOTREE_VALUE_WARMUP_TOKENS", 8)
 # Tail-phase snapshot margin: when the parent is within this many tokens of
 # its cap, periodic snapshots start carrying branch outputs (see the
 # branch-0 attach site for the delivery-race rationale).
-TAIL_SNAPSHOT_PARENT_MARGIN = int(
-    _os.environ.get("AUTOTREE_TAIL_SNAPSHOT_MARGIN", "32")
-)
+TAIL_SNAPSHOT_PARENT_MARGIN = selection.env_int("AUTOTREE_TAIL_SNAPSHOT_MARGIN", 32)
 # Default 0.8: measured on 12-task math at 1.5B, margins <= 0.5 prune
 # minority-correct branches (accuracy loss); the naive logprob proxy
 # cannot separate branches more finely. Lower this only with a scorer
 # stronger than mean logprob (value head).
 VALUE_MARGIN = selection.env_float("AUTOTREE_VALUE_MARGIN", 0.8)
-VALUE_MIN_KEEP = int(_os.environ.get("AUTOTREE_VALUE_MIN_KEEP", "2"))
+VALUE_MIN_KEEP = selection.env_int("AUTOTREE_VALUE_MIN_KEEP", 2)
+ADAPT_MARGIN = selection.env_float("AUTOTREE_ADAPT_MARGIN", 2.0)
 
 
 class _BranchState:
@@ -158,6 +142,7 @@ class _TreeRun:
         "fork_cache_supported", "shared_prefix_group", "entropy_logprobs",
         "entropy_lp_seen", "tail_snapshot_active", "finished_sibling_rids",
         "fork_input_ids", "adaptive_failed", "tail_tokens_saved",
+        "parent_output_deferred",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -184,6 +169,7 @@ class _TreeRun:
         self.fork_input_ids = None
         self.adaptive_failed = False
         self.tail_tokens_saved = 0
+        self.parent_output_deferred = False
 
 
 class SchedulerTreeRuntime:
@@ -208,10 +194,9 @@ class SchedulerTreeRuntime:
     def handle_tree_request(self, recv: TokenizedTreeGenerateReqInput):
         """Dispatcher target: route the parent through normal intake."""
         params = dict(recv.tree)
-        _validate_branch_count(params)
+        branch_count = _validate_branch_count(params)
         try:
             run = _TreeRun(recv.rid, params)
-            branch_count = max(1, int(params.get("branches", 1) or 1))
             delayed_fork = self._uses_delayed_fork(run)
             if delayed_fork:
                 tree_cache = getattr(self.scheduler, "tree_cache", None)
@@ -277,6 +262,7 @@ class SchedulerTreeRuntime:
                 self._maybe_trigger_delayed_fork(run, req)
                 return
             self._fork_branches(run, req)
+            self._park_parent_if_complete(run)
         except Exception:
             logger.exception("[tree] fork failed; parent continues alone")
             if not run.branches:
@@ -299,6 +285,15 @@ class SchedulerTreeRuntime:
         if req.rid != run.parent_rid:
             run.finished_sibling_rids.add(req.rid)
             run.tail_snapshot_active = True
+            parent = run.branches.get("0")
+            if (
+                parent is not None
+                and parent.req is not None
+                and parent.req.finished()
+                and self._all_siblings_finished(run)
+            ):
+                self._finalize(run, reason="siblings_done")
+                return
             # If the parent's newest token already streamed, wait for its next
             # token so the final snapshot has a chunk to ride.
             if (
@@ -306,6 +301,9 @@ class SchedulerTreeRuntime:
                 and self._parent_has_unstreamed_token(run)
             ):
                 self._maybe_stop_parent_early(run)
+            return
+        if run.forked and self._all_siblings_finished(run):
+            self._finalize(run, reason="siblings_done")
             return
         if not self._uses_delayed_fork(run) or run.forked:
             return
@@ -326,13 +324,63 @@ class SchedulerTreeRuntime:
 
     # -- internals ---------------------------------------------------------
 
-    def _cleanup_run(self, run: _TreeRun, reason: str) -> None:
-        if not run.finalized:
-            self._finalize(run, reason=reason)
+    def _forget_run(self, run: _TreeRun) -> None:
         self.runs.pop(run.parent_rid, None)
         self.branch_index.pop(run.parent_rid, None)
         for branch in run.branches.values():
             self.branch_index.pop(branch.rid, None)
+
+    def _cleanup_run(self, run: _TreeRun, reason: str) -> None:
+        if reason == "parent_abort" and run.parent_output_deferred:
+            self._abort_deferred_parent(run)
+        if not run.finalized:
+            self._finalize(run, reason=reason)
+        self._forget_run(run)
+
+    def should_defer_parent_output(self, req: Any) -> bool:
+        """Retain a naturally finished parent response until tree finalization."""
+        run = self.branch_index.get(getattr(req, "rid", None))
+        if (
+            run is None
+            or run.finalized
+            or not run.forked
+            or req.rid != run.parent_rid
+            or not req.finished()
+        ):
+            return False
+        run.parent_output_deferred = True
+        return True
+
+    def _stream_deferred_parent(self, run: _TreeRun) -> bool:
+        if not run.parent_output_deferred:
+            return False
+        parent = run.branches.get("0")
+        req = parent.req if parent is not None else None
+        streamer = getattr(getattr(self.scheduler, "output_streamer", None), "stream_output", None)
+        if req is None or not callable(streamer):
+            logger.error("[tree] %s cannot emit deferred parent output", run.parent_rid)
+            return False
+        try:
+            streamer([req], bool(getattr(req, "return_logprob", False)))
+        except Exception:
+            logger.exception(
+                "[tree] %s failed to emit deferred parent output", run.parent_rid
+            )
+            return False
+        run.parent_output_deferred = False
+        self._forget_run(run)
+        return True
+
+    def _abort_deferred_parent(self, run: _TreeRun) -> None:
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None:
+            run.parent_output_deferred = False
+            return
+        from sglang.srt.managers.schedule_batch import FINISH_ABORT
+
+        parent.req.to_finish = FINISH_ABORT()
+        parent.state = "finalized"
+        self._stream_deferred_parent(run)
 
     @staticmethod
     def _uses_delayed_fork(run: _TreeRun) -> bool:
@@ -371,6 +419,7 @@ class SchedulerTreeRuntime:
         )
 
     def _hold_parent(self, run: _TreeRun, parent: Any) -> None:
+        """Keep the legacy carrier cap while runtime hooks park at the real limit."""
         sp = getattr(parent, "sampling_params", None)
         if sp is None or run.orig_sampling is None:
             return
@@ -378,6 +427,26 @@ class SchedulerTreeRuntime:
         if original_max is not None:
             sp.max_new_tokens = original_max + 64
         sp.ignore_eos = True
+
+    def _park_parent_if_complete(self, run: _TreeRun) -> bool:
+        """Finish the carrier at natural EOS or the caller's original token cap."""
+        if not run.forked:
+            return False
+        parent = run.branches.get("0")
+        if parent is None or parent.req is None or run.orig_sampling is None:
+            return False
+        original_max, _ = run.orig_sampling
+        reached_original_cap = (
+            original_max is not None
+            and len(parent.req.output_ids) >= int(original_max)
+        )
+        if not self._parent_has_natural_eos(run) and not reached_original_cap:
+            return False
+
+        from sglang.srt.managers.schedule_batch import FINISH_LENGTH
+
+        parent.req.to_finish = FINISH_LENGTH(length=len(parent.req.output_ids))
+        return True
 
     def _parent_has_natural_eos(self, run: _TreeRun) -> bool:
         parent = run.branches.get("0")
@@ -586,6 +655,7 @@ class SchedulerTreeRuntime:
             self._fork_branches(
                 run, parent_req, child_input_ids=child_input_ids
             )
+            self._park_parent_if_complete(run)
             logger.info(
                 "[tree] forked %d at %s (k=%d)",
                 max(0, int(run.params.get("branches", 1) or 1) - 1),
@@ -732,6 +802,55 @@ class SchedulerTreeRuntime:
             run.parent_rid, spawned,
         )
 
+    def trim_tokens_to_budget(
+        self,
+        req: Any,
+        token_ids: Any,
+        logprobs: Any = None,
+        *,
+        reserved: int = 0,
+    ):
+        """Trim one accepted token run to the remaining shared tree budget."""
+        run = self.branch_index.get(getattr(req, "rid", None))
+        if run is None or run.finalized:
+            return token_ids, logprobs
+
+        tokens = list(token_ids) if hasattr(token_ids, "__len__") else [token_ids]
+        allowed = len(tokens)
+
+        budget = int(run.params.get("budget_tokens", 0) or 0)
+        if budget > 0:
+            remaining_budget = max(
+                0,
+                budget - run.spent - max(0, int(reserved)),
+            )
+            allowed = min(allowed, remaining_budget)
+
+        if req.rid == run.parent_rid and run.orig_sampling is not None:
+            original_max, _ = run.orig_sampling
+            if original_max is not None:
+                remaining_parent = max(
+                    0,
+                    int(original_max) - len(getattr(req, "output_ids", ())),
+                )
+                allowed = min(allowed, remaining_parent)
+            tokenizer = getattr(self.scheduler, "tokenizer", None)
+            eos = getattr(tokenizer, "eos_token_id", None)
+            if eos is not None and eos in tokens[:allowed]:
+                allowed = tokens.index(eos) + 1
+
+        if len(tokens) <= allowed:
+            return token_ids, logprobs
+
+        tokens = tokens[:allowed]
+        if logprobs is None:
+            trimmed_logprobs = None
+        elif hasattr(logprobs, "__len__"):
+            trimmed_logprobs = list(logprobs)[:allowed]
+        else:
+            trimmed_logprobs = logprobs if allowed else None
+        return tokens, trimmed_logprobs
+
     def _account_tokens(
         self, run: _TreeRun, req: Any, token_ids, logprob: Optional[float]
     ) -> None:
@@ -775,6 +894,9 @@ class SchedulerTreeRuntime:
                 if fresh:
                     state.score += float(sum(fresh))
                     state.lp_seen = len(vals)
+
+        if state.branch_id == 0:
+            self._park_parent_if_complete(run)
 
         if run.spent - run.last_value_check >= VALUE_CHECK_INTERVAL:
             run.last_value_check = run.spent
@@ -904,9 +1026,11 @@ class SchedulerTreeRuntime:
         if len(counts) < 2:
             return False
 
-        target = min(int(adaptive_width), MAX_BRANCHES)
+        max_target = min(int(adaptive_width), MAX_BRANCHES)
         current = len(run.branches)
-        if current >= target:
+        if current >= max_target:
+            return False
+        if sum(counts.values()) < current:
             return False
 
         ordered_counts = sorted(counts.values(), reverse=True)
@@ -923,6 +1047,7 @@ class SchedulerTreeRuntime:
             return False
 
         before = len(run.branches)
+        target = min(max_target, max(current + 1, current * 2))
         try:
             self._fork_branches(
                 run,
@@ -1129,6 +1254,8 @@ class SchedulerTreeRuntime:
         for target in finish_targets:
             target.to_finish = FINISH_LENGTH(length=len(target.output_ids))
 
+        self._stream_deferred_parent(run)
+
 
 if _AUTOTREE_PROFILE_ENABLED:
     from functools import wraps as _profile_wraps
@@ -1174,6 +1301,9 @@ def get_active() -> Optional[SchedulerTreeRuntime]:
             and parent.req is not None
             and parent.req.finished()
         ):
+            if run.forked and not run.finalized:
+                runtime.should_defer_parent_output(parent.req)
+                continue
             runtime._cleanup_run(run, reason="parent_left")
     return runtime if any(not run.finalized for run in runtime.runs.values()) else None
 

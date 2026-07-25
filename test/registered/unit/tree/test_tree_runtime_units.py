@@ -382,3 +382,38 @@ def test_environment_knobs_override_defaults(monkeypatch):
         module.VALUE_MIN_KEEP,
         module.MAX_BRANCHES,
     ] == [5, 6, 1.25, 3, 7]
+
+
+def test_empty_environment_knobs_use_defaults(monkeypatch):
+    runtime_path = (
+        Path(__file__).resolve().parents[4]
+        / "python"
+        / "sglang"
+        / "srt"
+        / "tree"
+        / "tree_runtime.py"
+    )
+    for name in (
+        "AUTOTREE_MAX_BRANCHES",
+        "AUTOTREE_VALUE_CHECK_INTERVAL",
+        "AUTOTREE_VALUE_WARMUP_TOKENS",
+        "AUTOTREE_VALUE_MARGIN",
+        "AUTOTREE_VALUE_MIN_KEEP",
+        "AUTOTREE_ADAPT_MARGIN",
+        "AUTOTREE_TAIL_SNAPSHOT_MARGIN",
+    ):
+        monkeypatch.setenv(name, "")
+
+    spec = importlib.util.spec_from_file_location("tree_runtime_empty_env_test", runtime_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert [
+        module.MAX_BRANCHES,
+        module.VALUE_CHECK_INTERVAL,
+        module.VALUE_WARMUP_TOKENS,
+        module.VALUE_MARGIN,
+        module.VALUE_MIN_KEEP,
+        module.ADAPT_MARGIN,
+        module.TAIL_SNAPSHOT_PARENT_MARGIN,
+    ] == [64, 16, 8, 0.8, 2, 2.0, 32]
