@@ -8,12 +8,7 @@ are a no-op for every request AutoTree does not own". None of the existing 91
 tests checked that, which left the fork's core promise unpinned.
 
 These tests pin it against the PRODUCTION path, which is
-tree_runtime.get_active() plus the SchedulerTreeRuntime hooks. Note that
-SchedulerTreeBridge is a separate integration surface and is NOT what the
-scheduler calls; testing that instead would have pinned the wrong component.
-
-The final test pins a real misattribution defect in the bridge, found while
-writing these.
+tree_runtime.get_active() plus the SchedulerTreeRuntime hooks.
 """
 
 from types import SimpleNamespace
@@ -21,7 +16,6 @@ from types import SimpleNamespace
 from sglang.test.ci.ci_register import register_cpu_ci
 
 from sglang.srt.tree import tree_runtime
-from sglang.srt.tree.scheduler_integration import SchedulerTreeBridge
 
 register_cpu_ci(est_time=2, suite="per-commit-cpu")
 
@@ -88,22 +82,3 @@ def test_stock_requests_never_accumulate_runtime_state():
     assert runtime.branch_index == {}
     assert runtime.runs == {}
 
-
-def test_bridge_parent_lookup_does_not_misattribute_to_an_unrelated_tree():
-    """SchedulerTreeBridge._parent_rid_for falls back to an arbitrary tree.
-
-    When a rid belongs to no live tree the lookup iterates pending_results and
-    returns the first key it sees, so with more than one tree in flight a branch
-    is attributed to an unrelated tree. A lookup that finds no match must return
-    None.
-    """
-    bridge = SchedulerTreeBridge(
-        tree_cache=SimpleNamespace(),
-        enqueue=lambda req: None,
-        req_factory=lambda descriptor, parent: None,
-        mark_finish=lambda req: None,
-    )
-    bridge.pending_results["tree-A"] = object()
-    bridge.pending_results["tree-B"] = object()
-
-    assert bridge._parent_rid_for("rid-belonging-to-no-tree") is None

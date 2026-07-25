@@ -5,7 +5,7 @@ after prefill as ordinary requests whose prompts radix-share the parent. A
 request may instead wait for a text delimiter or chosen-logprob uncertainty
 trigger, then publish the parent's generated KV under a fork-local cache
 namespace before spawning siblings.
-Per-token hooks feed the tree manager; kills reuse the scheduler's abort path;
+Per-token hooks feed this runtime directly; kills reuse the scheduler's abort path;
 the parent remains the wire carrier for the final tree snapshot. All hooks are
 defensive: a tree bug degrades to plain generation, never a scheduler crash.
 
