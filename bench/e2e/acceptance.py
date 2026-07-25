@@ -167,6 +167,76 @@ def check_tree_completion(base, model):
     return run
 
 
+def check_tree_streaming(base, model):
+    """Streaming a TREE request must emit events and terminate.
+
+    Required, not optional. Tree streaming was broken end to end and nothing
+    caught it, because both the SDK and this gate only exercised the
+    non-streaming path.
+    """
+    def run():
+        req = urllib.request.Request(
+            base + "/v1/tree/completions",
+            data=json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": "What is 6 * 7?"}],
+                "max_tokens": 64, "stream": True,
+                "tree": {"policy": "beam", "branches": 2, "budget_tokens": 256},
+            }).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        chunks, done, saw_error = 0, False, None
+        with urllib.request.urlopen(req, timeout=300) as r:
+            for raw in r:
+                line = raw.decode().strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[len("data:"):].strip()
+                if payload == "[DONE]":
+                    done = True
+                    break
+                chunks += 1
+                try:
+                    obj = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict) and obj.get("error"):
+                    saw_error = str(obj["error"])[:120]
+                    break
+        if saw_error:
+            return False, f"stream carried an error event: {saw_error}"
+        return (chunks > 0 and done), f"chunks={chunks} terminated={done}"
+    return run
+
+
+def check_tree_stream_disconnect(base, model):
+    """Abandon a tree stream mid-flight; the server must stay healthy."""
+    def run():
+        host = base.split("://", 1)[1]
+        hostname, _, port = host.partition(":")
+        port = int(port or 80)
+        payload = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "Explain gravity at length."}],
+            "max_tokens": 512, "stream": True,
+            "tree": {"policy": "beam", "branches": 4, "budget_tokens": 1024},
+        })
+        for _ in range(2):
+            s = socket.create_connection((hostname, port), timeout=30)
+            s.sendall(
+                f"POST /v1/tree/completions HTTP/1.1\r\nHost: {host}\r\n"
+                f"Content-Type: application/json\r\n"
+                f"Content-Length: {len(payload)}\r\n\r\n{payload}".encode()
+            )
+            s.recv(256)
+            s.close()
+            time.sleep(0.5)
+        time.sleep(2)
+        status, _ = get(base, "/health")
+        return status == 200, f"healthy after 2 abandoned tree streams (status={status})"
+    return run
+
+
 def check_tree_branches_one_equals_plain(base, model):
     """branches=1 must degenerate to ordinary generation, not a special path."""
     def run():
@@ -334,6 +404,10 @@ def main():
     if not args.skip_tree:
         plan += [
             ("tree completion returns 200", True, check_tree_completion(base, args.model)),
+            ("tree STREAMING emits events and terminates", True,
+             check_tree_streaming(base, args.model)),
+            ("tree stream disconnect leaves server healthy", True,
+             check_tree_stream_disconnect(base, args.model)),
             ("tree branches=1 degenerates cleanly", True,
              check_tree_branches_one_equals_plain(base, args.model)),
             ("malformed tree params rejected 4xx", True,
