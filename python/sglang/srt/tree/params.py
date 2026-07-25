@@ -13,6 +13,9 @@ from typing import Any, Dict, List, Optional
 
 TREE_POLICIES = ("beam", "best_first", "mcts")
 MAX_BRANCHES = int(os.environ.get("AUTOTREE_MAX_BRANCHES", "64"))
+DEFAULT_CONSENSUS_WARMUP = 64
+DEFAULT_CONSENSUS_INTERVAL = 32
+DEFAULT_MIN_SURVIVORS = 2
 
 
 @dataclasses.dataclass
@@ -26,6 +29,9 @@ class TreeParams:
     fork_at_text: Optional[str] = None
     fork_at_entropy: Optional[float] = None
     adaptive_width: Optional[int] = None
+    consensus_warmup: int = DEFAULT_CONSENSUS_WARMUP
+    consensus_interval: int = DEFAULT_CONSENSUS_INTERVAL
+    min_survivors: int = DEFAULT_MIN_SURVIVORS
 
     def validate(self) -> None:
         if self.policy not in TREE_POLICIES:
@@ -61,6 +67,24 @@ class TreeParams:
                 raise ValueError(
                     f"adaptive_width must be at most {MAX_BRANCHES}"
                 )
+        if (
+            not isinstance(self.consensus_warmup, int)
+            or isinstance(self.consensus_warmup, bool)
+            or self.consensus_warmup < 0
+        ):
+            raise ValueError("consensus_warmup must be a non-negative integer")
+        if (
+            not isinstance(self.consensus_interval, int)
+            or isinstance(self.consensus_interval, bool)
+            or self.consensus_interval <= 0
+        ):
+            raise ValueError("consensus_interval must be a positive integer")
+        if (
+            not isinstance(self.min_survivors, int)
+            or isinstance(self.min_survivors, bool)
+            or self.min_survivors <= 0
+        ):
+            raise ValueError("min_survivors must be a positive integer")
 
     def to_runtime_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

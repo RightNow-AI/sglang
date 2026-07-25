@@ -185,6 +185,9 @@ class OpenAIServingTree(OpenAIServingBase):
                 fork_at_text=request.tree.fork_at_text,
                 fork_at_entropy=request.tree.fork_at_entropy,
                 adaptive_width=request.tree.adaptive_width,
+                consensus_warmup=request.tree.consensus_warmup,
+                consensus_interval=request.tree.consensus_interval,
+                min_survivors=request.tree.min_survivors,
             ),
         )
         tree_request.tree.validate()
