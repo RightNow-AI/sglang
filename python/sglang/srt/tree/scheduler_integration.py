@@ -36,6 +36,10 @@ class SchedulerTreeBridge:
         self.parent_reqs: Dict[str, Any] = {}
         self.branch_reqs: Dict[str, Any] = {}
         self.pending_results: Dict[str, TreeResult] = {}
+        # Explicit branch rid -> parent rid ownership, recorded when a branch is
+        # created. Without it the parent lookup has to guess, and guessing
+        # misattributes branches once more than one tree is in flight.
+        self.branch_parent: Dict[str, str] = {}
 
     # -- request intake ----------------------------------------------------
 
@@ -60,6 +64,7 @@ class SchedulerTreeBridge:
         for child in plan.children:
             req = self.req_factory(child, parent_req)
             self.branch_reqs[child.rid] = req
+            self.branch_parent[child.rid] = parent_req.rid
             self.enqueue(req)
         return len(plan.children)
 
@@ -112,9 +117,11 @@ class SchedulerTreeBridge:
             for branch in run.branches.values():
                 if branch.rid == branch_rid:
                     return parent_rid
-        for parent_rid in self.pending_results:
-            return parent_rid
-        return None
+        # Once a tree finalizes its run leaves live_trees, so fall back to the
+        # ownership recorded when the branch was created. Never guess: returning
+        # an arbitrary pending parent attributes the branch to an unrelated tree
+        # as soon as two trees are in flight.
+        return self.branch_parent.get(branch_rid)
 
 
 def make_child_req(descriptor: BranchRequestDescriptor, parent_req: Any) -> Any:
