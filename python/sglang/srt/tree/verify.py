@@ -24,6 +24,7 @@ class TreeVerifyRequest(BaseModel):
 class BranchScore(TypedDict):
     mean_logprob: float | None
     sum_logprob: float | None
+    token_logprobs: list[float] | None
     n_scored_tokens: int
     error: str | None
 
@@ -39,6 +40,7 @@ def _error_score(error: str) -> BranchScore:
     return {
         "mean_logprob": None,
         "sum_logprob": None,
+        "token_logprobs": None,
         "n_scored_tokens": 0,
         "error": error,
     }
@@ -163,6 +165,7 @@ def _score_result(result: Any, branch: _PreparedBranch) -> BranchScore:
         return {
             "mean_logprob": sum_logprob / len(values),
             "sum_logprob": sum_logprob,
+            "token_logprobs": values,
             "n_scored_tokens": len(values),
             "error": None,
         }

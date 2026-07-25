@@ -1,6 +1,7 @@
 import sys
 import types
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from sglang.srt.tree import tree_runtime
 from sglang.test.ci.ci_register import register_cpu_ci
@@ -93,9 +94,12 @@ def make_run(*, parent_ids, sibling_ids, sibling_finished, budget_tokens=0):
     return runtime, run, parent_req, sibling_req
 
 
-def test_parent_hold_is_unchanged_when_early_stop_env_is_unset(monkeypatch):
+def test_parent_hold_parks_at_eos_before_compatibility_tail(monkeypatch):
+    install_fake_finish_reason(monkeypatch)
     monkeypatch.delenv("AUTOTREE_EARLY_PARENT_STOP", raising=False)
-    runtime = tree_runtime.SchedulerTreeRuntime(SimpleNamespace())
+    runtime = tree_runtime.SchedulerTreeRuntime(
+        SimpleNamespace(tokenizer=FakeTokenizer())
+    )
     run = tree_runtime._TreeRun("parent", {"branches": 2})
     run.orig_sampling = (100, False)
     parent = FakeReq(
@@ -109,9 +113,43 @@ def test_parent_hold_is_unchanged_when_early_stop_env_is_unset(monkeypatch):
 
     assert parent.sampling_params.max_new_tokens == 164
     assert parent.sampling_params.ignore_eos is True
-    run.branches = {"0": tree_runtime._BranchState("parent", 0, parent)}
+    branch = tree_runtime._BranchState("parent", 0, parent)
+    run.branches = {"0": branch}
+    run.branches_by_rid = {"parent": branch}
+    run.forked = True
+    parent.output_ids.append(99)
+
+    runtime._account_tokens(run, parent, [99], -0.1)
+
+    assert parent.to_finish == ("length", 2)
+    assert parent.output_ids == [7, 99]
     runtime._attach_snapshot(run)
     assert "tail_tokens_saved" not in parent.customized_info["autotree"][-1]
+
+
+def test_naturally_finished_parent_output_waits_without_more_decode(monkeypatch):
+    install_fake_finish_reason(monkeypatch)
+    output_streamer = SimpleNamespace(stream_output=Mock())
+    runtime, run, parent, sibling = make_run(
+        parent_ids=[7, 99],
+        sibling_ids=[7],
+        sibling_finished=False,
+    )
+    runtime.scheduler.output_streamer = output_streamer
+    parent._finished = True
+
+    assert runtime.should_defer_parent_output(parent) is True
+    assert run.parent_output_deferred is True
+    assert parent.sampling_params.max_new_tokens == 164
+    assert len(parent.output_ids) == 2
+
+    sibling._finished = True
+    runtime.on_request_finished(sibling)
+
+    assert run.finalized is True
+    assert run.parent_output_deferred is False
+    output_streamer.stream_output.assert_called_once_with([parent], False)
+    assert len(parent.output_ids) == 2
 
 
 def test_early_stop_waits_for_parent_eos_even_when_siblings_are_done(monkeypatch):

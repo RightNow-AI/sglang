@@ -114,34 +114,56 @@ def test_adaptive_width_unset_preserves_fixed_width_behavior(monkeypatch):
     assert len(run.branches) == 3
 
 
-def test_disagreement_spawns_fresh_siblings_up_to_adaptive_width(monkeypatch):
+def test_disagreement_expands_adaptive_width_as_a_ladder(monkeypatch):
     monkeypatch.setattr(tree_runtime, "ADAPT_MARGIN", 2.0)
     runtime, scheduler, run = make_run(
-        answers={(1,): "7", (2,): "8", (3,): "9"},
-        adaptive_width=5,
+        answers={(1,): "7", (2,): "8"},
+        adaptive_width=8,
     )
     run.spent = 12
 
     runtime._maybe_majority_lock(run)
 
-    assert len(run.branches) == 5
+    assert len(run.branches) == 4
     assert [request.rid for request in scheduler.requests] == [
+        "parent#tree2",
         "parent#tree3",
-        "parent#tree4",
     ]
     assert [request.sampling_params.seed for request in scheduler.requests] == [
+        9,
         10,
-        11,
     ]
     assert all(
         list(request.input_ids) == [10, 11] for request in scheduler.requests
     )
+
+    runtime._maybe_majority_lock(run)
+    assert len(run.branches) == 4
+
+    scheduler.tokenizer.answers.update({(3,): "9", (4,): "10"})
+    run.branches["2"].req = FakeReq("parent#tree2", [3])
+    run.branches["3"].req = FakeReq("parent#tree3", [4])
+
+    runtime._maybe_majority_lock(run)
+
+    assert len(run.branches) == 8
+    assert [request.rid for request in scheduler.requests] == [
+        "parent#tree2",
+        "parent#tree3",
+        "parent#tree4",
+        "parent#tree5",
+        "parent#tree6",
+        "parent#tree7",
+    ]
     assert run.shared_prefix_group.rids == [
         "parent",
         "parent#tree1",
         "parent#tree2",
         "parent#tree3",
         "parent#tree4",
+        "parent#tree5",
+        "parent#tree6",
+        "parent#tree7",
     ]
 
 

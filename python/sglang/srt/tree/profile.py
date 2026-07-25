@@ -9,13 +9,12 @@ import threading
 from time import perf_counter as _perf_counter
 from typing import Any, Dict
 
+from sglang.srt.tree.selection import env_int
+
 
 ENABLED = os.environ.get("AUTOTREE_PROFILE") == "1"
 
-try:
-    _PROFILE_EVERY = max(1, int(os.environ.get("AUTOTREE_PROFILE_EVERY", "200")))
-except ValueError:
-    _PROFILE_EVERY = 200
+_PROFILE_EVERY = max(1, env_int("AUTOTREE_PROFILE_EVERY", 200))
 
 _LOCK = threading.Lock()
 _COUNTERS: Dict[str, int] = {}

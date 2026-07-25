@@ -8,11 +8,107 @@ existing SDK and conformance suite apply unchanged.
 from __future__ import annotations
 
 import dataclasses
+import math
 import os
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
+from sglang.srt.tree.selection import env_int
+
 TREE_POLICIES = ("beam", "best_first", "mcts")
-MAX_BRANCHES = int(os.environ.get("AUTOTREE_MAX_BRANCHES", "64"))
+MAX_BRANCHES = env_int("AUTOTREE_MAX_BRANCHES", 64)
+MAX_BUDGET_TOKENS = 1_000_000
+TREE_PARAM_NAMES = frozenset(
+    {
+        "policy",
+        "branches",
+        "budget_tokens",
+        "scorer",
+        "fork_at_text",
+        "fork_at_entropy",
+        "adaptive_width",
+    }
+)
+
+
+def validate_tree_params(params: Mapping[str, Any]) -> None:
+    """Validate the complete scheduler-facing AutoTree parameter mapping."""
+    if not isinstance(params, Mapping):
+        raise ValueError("tree parameters must be a mapping")
+    unknown = sorted(set(params) - TREE_PARAM_NAMES)
+    if unknown:
+        raise ValueError(f"unknown tree parameter: {unknown[0]}")
+
+    policy = params.get("policy", "beam")
+    if not isinstance(policy, str) or policy not in TREE_POLICIES:
+        raise ValueError(f"policy must be one of {TREE_POLICIES}")
+
+    branches = params.get("branches", 4)
+    if not isinstance(branches, int) or isinstance(branches, bool) or branches < 1:
+        raise ValueError("branches must be a positive integer")
+    if branches > MAX_BRANCHES:
+        raise ValueError(f"branches must be at most {MAX_BRANCHES}")
+
+    budget_tokens = params.get("budget_tokens", 1024)
+    if (
+        not isinstance(budget_tokens, int)
+        or isinstance(budget_tokens, bool)
+        or budget_tokens < 1
+    ):
+        raise ValueError("budget_tokens must be a positive integer")
+    if budget_tokens > MAX_BUDGET_TOKENS:
+        raise ValueError(f"budget_tokens must be at most {MAX_BUDGET_TOKENS}")
+
+    scorer = params.get("scorer")
+    if scorer is not None and not isinstance(scorer, str):
+        raise ValueError("scorer must be a string or null")
+
+    fork_at_text = params.get("fork_at_text")
+    if fork_at_text is not None:
+        if not isinstance(fork_at_text, str) or not fork_at_text:
+            raise ValueError("fork_at_text must be a non-empty string")
+        if len(fork_at_text) > 64:
+            raise ValueError("fork_at_text must be at most 64 characters")
+
+    fork_at_entropy = params.get("fork_at_entropy")
+    if fork_at_entropy is not None:
+        if (
+            not isinstance(fork_at_entropy, (int, float))
+            or isinstance(fork_at_entropy, bool)
+            or not math.isfinite(float(fork_at_entropy))
+            or fork_at_entropy <= 0
+        ):
+            raise ValueError("fork_at_entropy must be a finite number greater than 0")
+
+    if fork_at_text is not None and fork_at_entropy is not None:
+        raise ValueError("fork_at_text and fork_at_entropy are mutually exclusive")
+
+    adaptive_width = params.get("adaptive_width")
+    if adaptive_width is not None:
+        if not isinstance(adaptive_width, int) or isinstance(adaptive_width, bool):
+            raise ValueError("adaptive_width must be an integer")
+        if adaptive_width <= branches:
+            raise ValueError("adaptive_width must be greater than branches")
+        if adaptive_width > MAX_BRANCHES:
+            raise ValueError(f"adaptive_width must be at most {MAX_BRANCHES}")
+
+
+def normalize_tree_params(params: Mapping[str, Any]) -> Dict[str, Any]:
+    """Apply wire defaults and return a validated scheduler parameter dict."""
+    if not isinstance(params, Mapping):
+        raise ValueError("tree parameters must be a mapping")
+    normalized = {
+        "policy": "beam",
+        "branches": 4,
+        "budget_tokens": 1024,
+        "scorer": None,
+        "fork_at_text": None,
+        "fork_at_entropy": None,
+        "adaptive_width": None,
+    }
+    normalized.update(dict(params))
+    validate_tree_params(normalized)
+    return normalized
 
 
 @dataclasses.dataclass
@@ -28,42 +124,12 @@ class TreeParams:
     adaptive_width: Optional[int] = None
 
     def validate(self) -> None:
-        if self.policy not in TREE_POLICIES:
-            raise ValueError(f"policy must be one of {TREE_POLICIES}")
-        if not isinstance(self.branches, int) or self.branches < 1:
-            raise ValueError("branches must be a positive integer")
-        if not isinstance(self.budget_tokens, int) or self.budget_tokens < 1:
-            raise ValueError("budget_tokens must be a positive integer")
-        if self.fork_at_text is not None:
-            if not isinstance(self.fork_at_text, str) or not self.fork_at_text:
-                raise ValueError("fork_at_text must be a non-empty string")
-            if len(self.fork_at_text) > 64:
-                raise ValueError("fork_at_text must be at most 64 characters")
-        if self.fork_at_entropy is not None:
-            if not isinstance(self.fork_at_entropy, (int, float)) or isinstance(
-                self.fork_at_entropy, bool
-            ):
-                raise ValueError("fork_at_entropy must be greater than 0")
-            if not self.fork_at_entropy > 0:
-                raise ValueError("fork_at_entropy must be greater than 0")
-        if self.fork_at_text is not None and self.fork_at_entropy is not None:
-            raise ValueError(
-                "fork_at_text and fork_at_entropy are mutually exclusive"
-            )
-        if self.adaptive_width is not None:
-            if not isinstance(self.adaptive_width, int) or isinstance(
-                self.adaptive_width, bool
-            ):
-                raise ValueError("adaptive_width must be an integer")
-            if self.adaptive_width <= self.branches:
-                raise ValueError("adaptive_width must be greater than branches")
-            if self.adaptive_width > MAX_BRANCHES:
-                raise ValueError(
-                    f"adaptive_width must be at most {MAX_BRANCHES}"
-                )
+        validate_tree_params(dataclasses.asdict(self))
 
     def to_runtime_dict(self) -> Dict[str, Any]:
-        return dataclasses.asdict(self)
+        result = dataclasses.asdict(self)
+        validate_tree_params(result)
+        return result
 
 
 @dataclasses.dataclass

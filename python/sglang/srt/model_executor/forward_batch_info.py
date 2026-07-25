@@ -765,7 +765,7 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
         if (
             ret.forward_mode.is_decode()
             and ret.rids
-            and _autotree_os.environ.get("AUTOTREE_SHARED_READ", "1") != "0"
+            and _autotree_os.environ.get("AUTOTREE_SHARED_READ", "0") != "0"
         ):
             if _AUTOTREE_PROFILE_ENABLED:
                 with _autotree_profile_span("forward_batch.shared_prefix_groups"):

@@ -35,6 +35,7 @@ from sglang.srt.tree import (
     TreeSummary,
 )
 from sglang.srt.tree.memo import MemoStore, canonical_key
+from sglang.srt.tree.selection import env_int
 
 if TYPE_CHECKING:
     from sglang.srt.entrypoints.openai.serving_chat import OpenAIServingChat
@@ -72,7 +73,7 @@ class OpenAIServingTree(OpenAIServingBase):
         path = os.environ.get("AUTOTREE_MEMO_PATH") or os.path.join(
             tempfile.gettempdir(), f"sglang-autotree-memo-{os.getpid()}.jsonl"
         )
-        max_entries = int(os.environ.get("AUTOTREE_MEMO_MAX_ENTRIES", "10000"))
+        max_entries = env_int("AUTOTREE_MEMO_MAX_ENTRIES", 10000)
         return MemoStore(
             path,
             max_entries=max_entries,
@@ -170,7 +171,7 @@ class OpenAIServingTree(OpenAIServingBase):
         base_request, _ = self.chat_serving._convert_to_internal_request(
             chat_request, raw_request
         )
-        base_request.return_logprob = True
+        base_request.return_logprob = request.tree.branches > 1
         # The scheduler-side tree runtime consumes only numeric logprob values.
         # Avoid detokenizing every returned logprob token in TokenizerManager.
         base_request.return_text_in_logprobs = False

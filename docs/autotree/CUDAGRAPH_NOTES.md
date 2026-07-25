@@ -89,10 +89,9 @@ python -m sglang.launch_server `
   --cuda-graph-backend-decode full
 ```
 
-Remove `--disable-cuda-graph` from existing run scripts. Also do not pass
-`--disable-decode-cuda-graph` or
-`--cuda-graph-backend-decode disabled`. If a measurement can exceed the
-automatically selected capture range, set
+CUDA graphs must stay enabled in every AutoTree run script, configuration, and
+measurement command. If a measurement can exceed the automatically selected
+capture range, set
 `--cuda-graph-max-bs-decode <MAX_LIVE_BATCH_SIZE>` high enough to cover it.
 
 The server can still fall back to eager execution for a batch that violates a

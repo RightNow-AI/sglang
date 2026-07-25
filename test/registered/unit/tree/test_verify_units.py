@@ -68,6 +68,7 @@ def test_continuation_span_scores_exact_tokens():
     )
     assert math.isclose(score["mean_logprob"], -0.3)
     assert math.isclose(score["sum_logprob"], -0.6)
+    assert score["token_logprobs"] == [-0.2, -0.4]
     assert score["n_scored_tokens"] == 2
     assert score["error"] is None
 
@@ -84,6 +85,7 @@ def test_malformed_and_empty_continuations_return_errors_without_calling_model()
     assert len(scores) == 2
     assert all(score["mean_logprob"] is None for score in scores)
     assert all(score["sum_logprob"] is None for score in scores)
+    assert all(score["token_logprobs"] is None for score in scores)
     assert all(score["n_scored_tokens"] == 0 for score in scores)
     assert all(score["error"] for score in scores)
 
