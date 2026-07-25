@@ -181,6 +181,10 @@ class OpenAIServingTree(OpenAIServingBase):
         # Avoid detokenizing every returned logprob token in TokenizerManager.
         base_request.return_text_in_logprobs = False
 
+        verifier = getattr(request.tree, "verifier", None)
+        if hasattr(verifier, "model_dump"):
+            verifier = verifier.model_dump()
+
         tree_request = TreeGenerateReqInput(
             base=base_request,
             tree=TreeParams(
@@ -203,6 +207,7 @@ class OpenAIServingTree(OpenAIServingBase):
                 min_survivors=getattr(
                     request.tree, "min_survivors", DEFAULT_MIN_SURVIVORS
                 ),
+                verifier=verifier,
             ),
         )
         tree_request.tree.validate()
@@ -215,6 +220,8 @@ class OpenAIServingTree(OpenAIServingBase):
         raw_request: Request,
     ) -> Union[TreeCompletionResponse, ORJSONResponse]:
         memo_store = self._active_memo_store()
+        if adapted_request.tree.verifier is not None:
+            memo_store = None
         memo_key = None
         if memo_store is not None:
             memo_key = self._memo_key(adapted_request, request)
@@ -332,6 +339,10 @@ class OpenAIServingTree(OpenAIServingBase):
             winner_id = str(snap.get("winner_branch_id") or "0")
             winner_ids = list(meta.get("output_ids", []) or [])
             used_scorer = scorer or "mean_logprob"
+            verifier_used = bool(
+                snap.get("verifier_used", False)
+                or getattr(params, "verifier", None) is not None
+            )
 
             # Self-consistency winner selection: when the final snapshot carries
             # every branch's token ids, detokenize each, extract the final
@@ -344,15 +355,18 @@ class OpenAIServingTree(OpenAIServingBase):
                 else {}
             )
             if branch_texts:
-                voted = self._self_consistency_vote(branches, branch_texts)
-                if voted is not None:
-                    winner_id = voted
-                    text = branch_texts[voted]
+                selected = winner_id if verifier_used else self._self_consistency_vote(
+                    branches, branch_texts
+                )
+                if selected is not None and selected in branch_texts:
+                    winner_id = selected
+                    text = branch_texts[selected]
                     winner_ids = list(
-                        (branches.get(voted) or {}).get("output_ids") or []
+                        (branches.get(selected) or {}).get("output_ids") or []
                     )
                     completion_tokens = len(winner_ids) or completion_tokens
-                    used_scorer = "self_consistency"
+                    if not verifier_used:
+                        used_scorer = "self_consistency"
 
             summary = TreeSummary(
                 policy=snap.get("policy") or policy,
@@ -371,6 +385,13 @@ class OpenAIServingTree(OpenAIServingBase):
                 scorer=used_scorer,
                 kv_reuse_ratio=None,
                 branch_answers=branch_answers,
+                verifier_used=verifier_used,
+                verifier_approved_count=int(
+                    snap.get("verifier_approved_count", 0) or 0
+                ),
+                verifier_fell_back=bool(
+                    snap.get("verifier_fell_back", False)
+                ),
             )
             return TreeResult(
                 winner_text=text,
@@ -391,6 +412,9 @@ class OpenAIServingTree(OpenAIServingBase):
             final_scores={},
             scorer=scorer,
             kv_reuse_ratio=None,
+            verifier_used=getattr(params, "verifier", None) is not None,
+            verifier_approved_count=0,
+            verifier_fell_back=getattr(params, "verifier", None) is not None,
         )
         return TreeResult(
             winner_text=text,
@@ -724,4 +748,9 @@ class OpenAIServingTree(OpenAIServingBase):
             branch_answers=getattr(summary, "branch_answers", {}) or {},
             served_from_memo=getattr(summary, "served_from_memo", False),
             memo_key=getattr(summary, "memo_key", None),
+            verifier_used=getattr(summary, "verifier_used", False),
+            verifier_approved_count=getattr(
+                summary, "verifier_approved_count", 0
+            ),
+            verifier_fell_back=getattr(summary, "verifier_fell_back", False),
         )

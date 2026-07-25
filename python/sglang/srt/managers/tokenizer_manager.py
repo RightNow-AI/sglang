@@ -630,6 +630,9 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
             elif hasattr(tree, "to_runtime_dict"):
                 params = tree.to_runtime_dict()
             else:
+                verifier = getattr(tree, "verifier", None)  # [autotree-splice]
+                if hasattr(verifier, "model_dump"):  # [autotree-splice]
+                    verifier = verifier.model_dump()  # [autotree-splice]
                 params = {
                     "policy": getattr(tree, "policy", "beam"),
                     "branches": getattr(tree, "branches", 1),
@@ -641,7 +644,10 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                     "consensus_warmup": getattr(tree, "consensus_warmup", 64),
                     "consensus_interval": getattr(tree, "consensus_interval", 32),
                     "min_survivors": getattr(tree, "min_survivors", 2),
+                    "verifier": verifier,  # [autotree-splice]
                 }
+                if params["verifier"] is None:  # [autotree-splice]
+                    params.pop("verifier")  # [autotree-splice]
             setattr(base, "_autotree_params", params)
             return base
         return obj

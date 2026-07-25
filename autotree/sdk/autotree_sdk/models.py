@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Annotated, Any, Literal, Sequence, TypeAlias
+from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -12,6 +14,7 @@ from pydantic import (
     Field,
     TypeAdapter,
     ValidationError,
+    model_serializer,
     model_validator,
 )
 
@@ -20,6 +23,56 @@ from .errors import ExportError, SSEParseError
 TreePolicy: TypeAlias = Literal["beam", "best_first", "mcts"]
 Prompt: TypeAlias = str | list[dict[str, Any]]
 NonNegativeInt: TypeAlias = Annotated[int, Field(ge=0)]
+
+
+class RegexVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["regex"]
+    pattern: str = Field(min_length=1)
+    flags: Literal["", "i"] = ""
+
+    @model_validator(mode="after")
+    def validate_pattern(self) -> "RegexVerifierParameters":
+        try:
+            re.compile(
+                self.pattern,
+                re.IGNORECASE if self.flags == "i" else 0,
+            )
+        except re.error as error:
+            raise ValueError(f"invalid regex verifier pattern: {error}") from error
+        return self
+
+
+class NumericVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    type: Literal["numeric"]
+    equals: float
+    tolerance: float = Field(ge=0)
+
+
+class CallbackVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    type: Literal["callback"]
+    url: str = Field(min_length=1, max_length=2048)
+    timeout_s: float = Field(gt=0, le=10)
+
+    @model_validator(mode="after")
+    def validate_url(self) -> "CallbackVerifierParameters":
+        parsed = urlsplit(self.url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("callback verifier url must use http or https")
+        return self
+
+
+VerifierParameters: TypeAlias = Annotated[
+    RegexVerifierParameters
+    | NumericVerifierParameters
+    | CallbackVerifierParameters,
+    Field(discriminator="type"),
+]
 
 
 # matches tree-engine serving_tree.py envelope
@@ -43,6 +96,14 @@ class TreeParameters(BaseModel):
     consensus_warmup: NonNegativeInt | None = None
     consensus_interval: int | None = Field(default=None, gt=0)
     min_survivors: int | None = Field(default=None, gt=0)
+    verifier: VerifierParameters | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_verifier(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        if self.verifier is None:
+            data.pop("verifier", None)
+        return data
 
 
 class Usage(BaseModel):
@@ -81,6 +142,9 @@ class TreeSummary(BaseModel):
     branch_answers: dict[str, str | None] = Field(default_factory=dict)
     served_from_memo: bool = False
     memo_key: str | None = None
+    verifier_used: bool = False
+    verifier_approved_count: NonNegativeInt = 0
+    verifier_fell_back: bool = False
 
     @model_validator(mode="after")
     def validate_branches(self) -> "TreeSummary":
