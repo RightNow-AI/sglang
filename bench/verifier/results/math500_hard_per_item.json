@@ -1,0 +1,3370 @@
+{
+ "first_branch": [
+  {
+   "id": "math500-428",
+   "pick": "-7.0",
+   "gold": "64.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-131",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-11",
+   "pick": "\\frac{8}{63}",
+   "gold": "\\frac{3}{56}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-101",
+   "pick": "1.0",
+   "gold": "850.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-43",
+   "pick": "50.0",
+   "gold": "70\\sqrt{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-93",
+   "pick": "33.0",
+   "gold": "33.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-110",
+   "pick": "2016.0",
+   "gold": "504.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-380",
+   "pick": "9.0",
+   "gold": "(0,9)\\cup(9,36)",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-190",
+   "pick": "\\frac{13}{18}",
+   "gold": "\\frac{13}{18}",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-134",
+   "pick": "0.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-12",
+   "pick": "296.0",
+   "gold": "284.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-22",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-388",
+   "pick": "5.5",
+   "gold": "\\frac{11}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-481",
+   "pick": "-1.0",
+   "gold": "8n^2+4n+1",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-188",
+   "pick": "11.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-321",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-308",
+   "pick": "3.0",
+   "gold": "1+2\\sqrt{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-249",
+   "pick": "12.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-305",
+   "pick": "\\frac{9}{19}",
+   "gold": "\\frac9{19}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-241",
+   "pick": "-4.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-85",
+   "pick": "4.0",
+   "gold": "\\sqrt{5}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-55",
+   "pick": "21.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-495",
+   "pick": "(2,102)",
+   "gold": "(2,12)\\cup(12,102)",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-355",
+   "pick": "\\frac{8}{3}",
+   "gold": "100.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-68",
+   "pick": "37.0",
+   "gold": "46.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-415",
+   "pick": "11.0",
+   "gold": "9.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-497",
+   "pick": "2+\\sqrt{2}",
+   "gold": "\\frac{7}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-257",
+   "pick": "72.0",
+   "gold": "864\\mbox{inches}^2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-250",
+   "pick": "13.0",
+   "gold": "13.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-499",
+   "pick": "117.0",
+   "gold": "106^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-137",
+   "pick": "204_5",
+   "gold": "204_5",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-41",
+   "pick": "11.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-329",
+   "pick": "4.0",
+   "gold": "4.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-280",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-242",
+   "pick": "25238.0",
+   "gold": "\\32,348",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-494",
+   "pick": "-3.0",
+   "gold": "\\frac{1}{4}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-300",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-331",
+   "pick": "180.0",
+   "gold": "\\frac{13}{6}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-52",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-271",
+   "pick": "5.0",
+   "gold": "333.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-293",
+   "pick": "(\\frac{3}{10},\\frac{8}{3}]",
+   "gold": "(\\frac{3}{5},\\frac{8}{3}]",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-26",
+   "pick": "38.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-150",
+   "pick": "2.0",
+   "gold": "1.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-407",
+   "pick": "9.0",
+   "gold": "9.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-285",
+   "pick": "-10.0",
+   "gold": "440.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-436",
+   "pick": "3.2189",
+   "gold": "4.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-470",
+   "pick": "976562.5",
+   "gold": "27648.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-162",
+   "pick": "5.0",
+   "gold": "\\dfrac{17}{50}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-466",
+   "pick": "\\pi",
+   "gold": "8\\pi",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-488",
+   "pick": "36.0",
+   "gold": "\\36",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-147",
+   "pick": "2.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-441",
+   "pick": "550.0",
+   "gold": "550.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-324",
+   "pick": "150.0",
+   "gold": "120.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-112",
+   "pick": "14.0",
+   "gold": "13.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-239",
+   "pick": "1.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-276",
+   "pick": "10.0",
+   "gold": "11.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-435",
+   "pick": "(-\\infty,2)\\cup(3,\\infty)",
+   "gold": "(-\\infty,2)\\cup(3,\\infty)",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-475",
+   "pick": "4.0",
+   "gold": "29.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-264",
+   "pick": "\\sqrt{34}-5",
+   "gold": "1\\frac{4}{5}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-44",
+   "pick": "1.25",
+   "gold": "1.25",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-7",
+   "pick": "79.7",
+   "gold": "90^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-183",
+   "pick": "23.0",
+   "gold": "23.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-82",
+   "pick": "1.0",
+   "gold": "\\frac{3}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-354",
+   "pick": "84.0",
+   "gold": "81.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-245",
+   "pick": "-9.0",
+   "gold": "-13x+3",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-327",
+   "pick": "1.0",
+   "gold": "15.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-202",
+   "pick": "\\frac{1}{4}",
+   "gold": "\\frac{2}{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-493",
+   "pick": "6.0",
+   "gold": "20.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-32",
+   "pick": "720.0",
+   "gold": "720.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-47",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-297",
+   "pick": "101.0",
+   "gold": "103.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-254",
+   "pick": "10.0",
+   "gold": "28.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-92",
+   "pick": "\\frac{2240}{78125}",
+   "gold": "\\frac{448}{15625}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-373",
+   "pick": "1+2i",
+   "gold": "1+2i",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-417",
+   "pick": "0.0",
+   "gold": "-2.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-125",
+   "pick": "153.0",
+   "gold": "-3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-383",
+   "pick": "[-2,7]",
+   "gold": "x\\in[-2,7]",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-17",
+   "pick": "\\frac{\\pi}{2}",
+   "gold": "\\pi",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-473",
+   "pick": "2.0",
+   "gold": "7.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-67",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-398",
+   "pick": "navin",
+   "gold": "navin",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-359",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-330",
+   "pick": "1940.0",
+   "gold": "1940.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-163",
+   "pick": "\\frac{8}{3}",
+   "gold": "-\\frac{35}{9}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-400",
+   "pick": "\\frac{7\\sqrt{2}}{2}",
+   "gold": "\\frac{14}{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-25",
+   "pick": "1.0",
+   "gold": "1,-2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-222",
+   "pick": "0.24",
+   "gold": "54.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-151",
+   "pick": "2.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-328",
+   "pick": "-1.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-341",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-100",
+   "pick": "48.0",
+   "gold": "145^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-419",
+   "pick": "1.0",
+   "gold": "\\begin{pmatrix}-7\\\\16\\\\5\\end{pmatrix}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-88",
+   "pick": "0.0",
+   "gold": "2.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-159",
+   "pick": "3.21",
+   "gold": "3.21",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-332",
+   "pick": "3\\sqrt{3}",
+   "gold": "2.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-461",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-425",
+   "pick": "\\frac{9r^2}{2}+r^2(a^2+b^2+c^2)",
+   "gold": "3r^2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-287",
+   "pick": "300.0",
+   "gold": "36.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-210",
+   "pick": "5.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-189",
+   "pick": "280.0",
+   "gold": "160.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-252",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-186",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-294",
+   "pick": "nosolution",
+   "gold": "58.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-432",
+   "pick": "198.0",
+   "gold": "331.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-381",
+   "pick": "2.0",
+   "gold": "\\frac{1}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-421",
+   "pick": "0.0",
+   "gold": "27.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-244",
+   "pick": "143.0",
+   "gold": "8.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-299",
+   "pick": "68.0",
+   "gold": "63.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-94",
+   "pick": "90^\\circ",
+   "gold": "80.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-232",
+   "pick": "1996.0",
+   "gold": "\\frac{1997}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-272",
+   "pick": "22.0",
+   "gold": "1030.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-301",
+   "pick": "5.5",
+   "gold": "5.4\\text{cents}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-158",
+   "pick": "2037.0",
+   "gold": "2107.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-333",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-71",
+   "pick": "262.0",
+   "gold": "2516_8",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-103",
+   "pick": "4.0",
+   "gold": "(3,4]",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-335",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-231",
+   "pick": "4.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-69",
+   "pick": "2.0",
+   "gold": "-1.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-382",
+   "pick": "-271.0",
+   "gold": "\\frac{20000}{\\pi}",
+   "correct": false,
+   "approved": null
+  }
+ ],
+ "majority_vote": [
+  {
+   "id": "math500-428",
+   "pick": "4.0",
+   "gold": "64.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-131",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-11",
+   "pick": "\\frac{8}{63}",
+   "gold": "\\frac{3}{56}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-101",
+   "pick": "1.0",
+   "gold": "850.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-43",
+   "pick": "50+\\sqrt{4100}",
+   "gold": "70\\sqrt{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-93",
+   "pick": "33.0",
+   "gold": "33.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-110",
+   "pick": "1.0",
+   "gold": "504.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-380",
+   "pick": "9.0",
+   "gold": "(0,9)\\cup(9,36)",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-190",
+   "pick": "\\frac{5}{6}",
+   "gold": "\\frac{13}{18}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-134",
+   "pick": "16.0",
+   "gold": "16.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-12",
+   "pick": "286.0",
+   "gold": "284.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-22",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-388",
+   "pick": "5.5",
+   "gold": "\\frac{11}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-481",
+   "pick": "2.0",
+   "gold": "8n^2+4n+1",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-188",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-321",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-308",
+   "pick": "3.0",
+   "gold": "1+2\\sqrt{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-249",
+   "pick": "1.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-305",
+   "pick": "\\frac{9}{19}",
+   "gold": "\\frac9{19}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-241",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-85",
+   "pick": "\\sqrt{5}",
+   "gold": "\\sqrt{5}",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-55",
+   "pick": "5.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-495",
+   "pick": "(2,102)",
+   "gold": "(2,12)\\cup(12,102)",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-355",
+   "pick": "\\frac{8}{3}",
+   "gold": "100.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-68",
+   "pick": "37.0",
+   "gold": "46.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-415",
+   "pick": "11.0",
+   "gold": "9.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-497",
+   "pick": "2+\\sqrt{2}",
+   "gold": "\\frac{7}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-257",
+   "pick": "864.0",
+   "gold": "864\\mbox{inches}^2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-250",
+   "pick": "13.0",
+   "gold": "13.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-499",
+   "pick": "117.0",
+   "gold": "106^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-137",
+   "pick": "204_5",
+   "gold": "204_5",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-41",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-329",
+   "pick": "4.0",
+   "gold": "4.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-280",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-242",
+   "pick": "25238.0",
+   "gold": "\\32,348",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-494",
+   "pick": "1.0",
+   "gold": "\\frac{1}{4}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-300",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-331",
+   "pick": "5.0",
+   "gold": "\\frac{13}{6}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-52",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-271",
+   "pick": "4.0",
+   "gold": "333.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-293",
+   "pick": "(\\frac{3}{5},\\frac{8}{3}]",
+   "gold": "(\\frac{3}{5},\\frac{8}{3}]",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-26",
+   "pick": "576.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-150",
+   "pick": "2.0",
+   "gold": "1.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-407",
+   "pick": "9.0",
+   "gold": "9.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-285",
+   "pick": "3.0",
+   "gold": "440.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-436",
+   "pick": "1.0",
+   "gold": "4.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-470",
+   "pick": "976562.5",
+   "gold": "27648.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-162",
+   "pick": "\\frac{17}{50}",
+   "gold": "\\dfrac{17}{50}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-466",
+   "pick": "8\\pi",
+   "gold": "8\\pi",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-488",
+   "pick": "36.0",
+   "gold": "\\36",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-147",
+   "pick": "2.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-441",
+   "pick": "550.0",
+   "gold": "550.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-324",
+   "pick": "3.0",
+   "gold": "120.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-112",
+   "pick": "14.0",
+   "gold": "13.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-239",
+   "pick": "1.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-276",
+   "pick": "10.0",
+   "gold": "11.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-435",
+   "pick": "(-\\infty,2)\\cup(3,\\infty)",
+   "gold": "(-\\infty,2)\\cup(3,\\infty)",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-475",
+   "pick": "4.0",
+   "gold": "29.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-264",
+   "pick": "5.0",
+   "gold": "1\\frac{4}{5}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-44",
+   "pick": "1.25",
+   "gold": "1.25",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-7",
+   "pick": "79.7",
+   "gold": "90^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-183",
+   "pick": "23.0",
+   "gold": "23.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-82",
+   "pick": "\\frac{3}{5}",
+   "gold": "\\frac{3}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-354",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-245",
+   "pick": "0.0",
+   "gold": "-13x+3",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-327",
+   "pick": "1.0",
+   "gold": "15.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-202",
+   "pick": "\\frac{1}{2}",
+   "gold": "\\frac{2}{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-493",
+   "pick": "20.0",
+   "gold": "20.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-32",
+   "pick": "720.0",
+   "gold": "720.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-47",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-297",
+   "pick": "103.0",
+   "gold": "103.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-254",
+   "pick": "28.0",
+   "gold": "28.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-92",
+   "pick": "\\frac{2240}{78125}",
+   "gold": "\\frac{448}{15625}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-373",
+   "pick": "1+2i",
+   "gold": "1+2i",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-417",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-125",
+   "pick": "-3.0",
+   "gold": "-3.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-383",
+   "pick": "[-2,7]",
+   "gold": "x\\in[-2,7]",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-17",
+   "pick": "\\frac{\\pi}{2}",
+   "gold": "\\pi",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-473",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-67",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-398",
+   "pick": "navin",
+   "gold": "navin",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-359",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-330",
+   "pick": "1940.0",
+   "gold": "1940.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-163",
+   "pick": "\\frac{8}{3}",
+   "gold": "-\\frac{35}{9}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-400",
+   "pick": "\\frac{7\\sqrt{2}}{2}",
+   "gold": "\\frac{14}{3}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-25",
+   "pick": "1.0",
+   "gold": "1,-2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-222",
+   "pick": "96.0",
+   "gold": "54.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-151",
+   "pick": "2.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-328",
+   "pick": "2.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-341",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-100",
+   "pick": "145.0",
+   "gold": "145^\\circ",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-419",
+   "pick": "18.0",
+   "gold": "\\begin{pmatrix}-7\\\\16\\\\5\\end{pmatrix}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-88",
+   "pick": "0.0",
+   "gold": "2.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-159",
+   "pick": "3.21",
+   "gold": "3.21",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-332",
+   "pick": "\\frac{4\\sqrt{3}}{3}",
+   "gold": "2.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-461",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-425",
+   "pick": "2.0",
+   "gold": "3r^2",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-287",
+   "pick": "300.0",
+   "gold": "36.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-210",
+   "pick": "5.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-189",
+   "pick": "280.0",
+   "gold": "160.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-252",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-186",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-294",
+   "pick": "38.0",
+   "gold": "58.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-432",
+   "pick": "198.0",
+   "gold": "331.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-381",
+   "pick": "2.0",
+   "gold": "\\frac{1}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-421",
+   "pick": "0.0",
+   "gold": "27.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-244",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-299",
+   "pick": "63.0",
+   "gold": "63.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-94",
+   "pick": "70^\\circ",
+   "gold": "80.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-232",
+   "pick": "1996.0",
+   "gold": "\\frac{1997}{2}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-272",
+   "pick": "11330.0",
+   "gold": "1030.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-301",
+   "pick": "5.5",
+   "gold": "5.4\\text{cents}",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-158",
+   "pick": "2037.0",
+   "gold": "2107.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-333",
+   "pick": "1.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-71",
+   "pick": "5236.0",
+   "gold": "2516_8",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-103",
+   "pick": "1.0",
+   "gold": "(3,4]",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-335",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": null
+  },
+  {
+   "id": "math500-231",
+   "pick": "4.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-69",
+   "pick": "2.0",
+   "gold": "-1.0",
+   "correct": false,
+   "approved": null
+  },
+  {
+   "id": "math500-382",
+   "pick": "5000.0",
+   "gold": "\\frac{20000}{\\pi}",
+   "correct": false,
+   "approved": null
+  }
+ ],
+ "verified_wellformed": [
+  {
+   "id": "math500-428",
+   "pick": "4.0",
+   "gold": "64.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-131",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-11",
+   "pick": "5.0",
+   "gold": "\\frac{3}{56}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-101",
+   "pick": "1.0",
+   "gold": "850.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-43",
+   "pick": "41.0",
+   "gold": "70\\sqrt{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-93",
+   "pick": "33.0",
+   "gold": "33.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-110",
+   "pick": "1.0",
+   "gold": "504.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-380",
+   "pick": "9.0",
+   "gold": "(0,9)\\cup(9,36)",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-190",
+   "pick": "\\frac{5}{6}",
+   "gold": "\\frac{13}{18}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-134",
+   "pick": "16.0",
+   "gold": "16.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-12",
+   "pick": "286.0",
+   "gold": "284.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-22",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-388",
+   "pick": "5.5",
+   "gold": "\\frac{11}{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-481",
+   "pick": "2.0",
+   "gold": "8n^2+4n+1",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-188",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-321",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-308",
+   "pick": "3.0",
+   "gold": "1+2\\sqrt{3}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-249",
+   "pick": "1.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-305",
+   "pick": "\\frac{9}{19}",
+   "gold": "\\frac9{19}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-241",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-85",
+   "pick": "4.0",
+   "gold": "\\sqrt{5}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-55",
+   "pick": "5.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-495",
+   "pick": "(2,102)",
+   "gold": "(2,12)\\cup(12,102)",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-355",
+   "pick": "39.0",
+   "gold": "100.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-68",
+   "pick": "37.0",
+   "gold": "46.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-415",
+   "pick": "11.0",
+   "gold": "9.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-497",
+   "pick": "2.0",
+   "gold": "\\frac{7}{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-257",
+   "pick": "864.0",
+   "gold": "864\\mbox{inches}^2",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-250",
+   "pick": "13.0",
+   "gold": "13.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-499",
+   "pick": "117.0",
+   "gold": "106^\\circ",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-137",
+   "pick": "204_5",
+   "gold": "204_5",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-41",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-329",
+   "pick": "4.0",
+   "gold": "4.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-280",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-242",
+   "pick": "25238.0",
+   "gold": "\\32,348",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-494",
+   "pick": "1.0",
+   "gold": "\\frac{1}{4}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-300",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-331",
+   "pick": "5.0",
+   "gold": "\\frac{13}{6}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-52",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-271",
+   "pick": "4.0",
+   "gold": "333.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-293",
+   "pick": "(\\frac{3}{5},\\frac{8}{3}]",
+   "gold": "(\\frac{3}{5},\\frac{8}{3}]",
+   "correct": true,
+   "approved": false
+  },
+  {
+   "id": "math500-26",
+   "pick": "576.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-150",
+   "pick": "2.0",
+   "gold": "1.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-407",
+   "pick": "9.0",
+   "gold": "9.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-285",
+   "pick": "3.0",
+   "gold": "440.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-436",
+   "pick": "1.0",
+   "gold": "4.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-470",
+   "pick": "976562.5",
+   "gold": "27648.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-162",
+   "pick": "100.0",
+   "gold": "\\dfrac{17}{50}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-466",
+   "pick": "9.0",
+   "gold": "8\\pi",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-488",
+   "pick": "36.0",
+   "gold": "\\36",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-147",
+   "pick": "2.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-441",
+   "pick": "550.0",
+   "gold": "550.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-324",
+   "pick": "3.0",
+   "gold": "120.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-112",
+   "pick": "14.0",
+   "gold": "13.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-239",
+   "pick": "1.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-276",
+   "pick": "10.0",
+   "gold": "11.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-435",
+   "pick": "3.0",
+   "gold": "(-\\infty,2)\\cup(3,\\infty)",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-475",
+   "pick": "4.0",
+   "gold": "29.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-264",
+   "pick": "5.0",
+   "gold": "1\\frac{4}{5}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-44",
+   "pick": "1.25",
+   "gold": "1.25",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-7",
+   "pick": "79.7",
+   "gold": "90^\\circ",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-183",
+   "pick": "23.0",
+   "gold": "23.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-82",
+   "pick": "1.0",
+   "gold": "\\frac{3}{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-354",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-245",
+   "pick": "0.0",
+   "gold": "-13x+3",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-327",
+   "pick": "1.0",
+   "gold": "15.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-202",
+   "pick": "1.0",
+   "gold": "\\frac{2}{3}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-493",
+   "pick": "20.0",
+   "gold": "20.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-32",
+   "pick": "720.0",
+   "gold": "720.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-47",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-297",
+   "pick": "103.0",
+   "gold": "103.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-254",
+   "pick": "28.0",
+   "gold": "28.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-92",
+   "pick": "\\frac{2240}{78125}",
+   "gold": "\\frac{448}{15625}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-373",
+   "pick": "1+2i",
+   "gold": "1+2i",
+   "correct": true,
+   "approved": false
+  },
+  {
+   "id": "math500-417",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-125",
+   "pick": "-3.0",
+   "gold": "-3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-383",
+   "pick": "7.0",
+   "gold": "x\\in[-2,7]",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-17",
+   "pick": "\\frac{\\pi}{2}",
+   "gold": "\\pi",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-473",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-67",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-398",
+   "pick": "navin",
+   "gold": "navin",
+   "correct": true,
+   "approved": false
+  },
+  {
+   "id": "math500-359",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-330",
+   "pick": "1940.0",
+   "gold": "1940.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-163",
+   "pick": "35.96",
+   "gold": "-\\frac{35}{9}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-400",
+   "pick": "-21.0",
+   "gold": "\\frac{14}{3}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-25",
+   "pick": "1.0",
+   "gold": "1,-2",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-222",
+   "pick": "96.0",
+   "gold": "54.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-151",
+   "pick": "2.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-328",
+   "pick": "2.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-341",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-100",
+   "pick": "145.0",
+   "gold": "145^\\circ",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-419",
+   "pick": "18.0",
+   "gold": "\\begin{pmatrix}-7\\\\16\\\\5\\end{pmatrix}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-88",
+   "pick": "0.0",
+   "gold": "2.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-159",
+   "pick": "3.21",
+   "gold": "3.21",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-332",
+   "pick": "3.0",
+   "gold": "2.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-461",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-425",
+   "pick": "2.0",
+   "gold": "3r^2",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-287",
+   "pick": "300.0",
+   "gold": "36.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-210",
+   "pick": "5.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-189",
+   "pick": "280.0",
+   "gold": "160.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-252",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-186",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-294",
+   "pick": "38.0",
+   "gold": "58.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-432",
+   "pick": "198.0",
+   "gold": "331.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-381",
+   "pick": "2.0",
+   "gold": "\\frac{1}{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-421",
+   "pick": "0.0",
+   "gold": "27.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-244",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-299",
+   "pick": "63.0",
+   "gold": "63.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-94",
+   "pick": "350.0",
+   "gold": "80.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-232",
+   "pick": "1996.0",
+   "gold": "\\frac{1997}{2}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-272",
+   "pick": "11330.0",
+   "gold": "1030.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-301",
+   "pick": "5.5",
+   "gold": "5.4\\text{cents}",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-158",
+   "pick": "2037.0",
+   "gold": "2107.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-333",
+   "pick": "1.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-71",
+   "pick": "5236.0",
+   "gold": "2516_8",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-103",
+   "pick": "1.0",
+   "gold": "(3,4]",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-335",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-231",
+   "pick": "4.0",
+   "gold": "10.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-69",
+   "pick": "2.0",
+   "gold": "-1.0",
+   "correct": false,
+   "approved": true
+  },
+  {
+   "id": "math500-382",
+   "pick": "5000.0",
+   "gold": "\\frac{20000}{\\pi}",
+   "correct": false,
+   "approved": true
+  }
+ ],
+ "verified_ORACLE": [
+  {
+   "id": "math500-428",
+   "pick": "4.0",
+   "gold": "64.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-131",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-11",
+   "pick": "\\frac{8}{63}",
+   "gold": "\\frac{3}{56}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-101",
+   "pick": "1.0",
+   "gold": "850.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-43",
+   "pick": "50+\\sqrt{4100}",
+   "gold": "70\\sqrt{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-93",
+   "pick": "33.0",
+   "gold": "33.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-110",
+   "pick": "1.0",
+   "gold": "504.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-380",
+   "pick": "9.0",
+   "gold": "(0,9)\\cup(9,36)",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-190",
+   "pick": "\\frac{13}{18}",
+   "gold": "\\frac{13}{18}",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-134",
+   "pick": "16.0",
+   "gold": "16.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-12",
+   "pick": "286.0",
+   "gold": "284.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-22",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-388",
+   "pick": "5.5",
+   "gold": "\\frac{11}{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-481",
+   "pick": "2.0",
+   "gold": "8n^2+4n+1",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-188",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-321",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-308",
+   "pick": "3.0",
+   "gold": "1+2\\sqrt{3}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-249",
+   "pick": "1.0",
+   "gold": "17.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-305",
+   "pick": "\\frac{9}{19}",
+   "gold": "\\frac9{19}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-241",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-85",
+   "pick": "\\sqrt{5}",
+   "gold": "\\sqrt{5}",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-55",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-495",
+   "pick": "(2,12)\\cup(12,102)",
+   "gold": "(2,12)\\cup(12,102)",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-355",
+   "pick": "\\frac{8}{3}",
+   "gold": "100.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-68",
+   "pick": "37.0",
+   "gold": "46.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-415",
+   "pick": "9.0",
+   "gold": "9.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-497",
+   "pick": "2+\\sqrt{2}",
+   "gold": "\\frac{7}{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-257",
+   "pick": "864.0",
+   "gold": "864\\mbox{inches}^2",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-250",
+   "pick": "13.0",
+   "gold": "13.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-499",
+   "pick": "117.0",
+   "gold": "106^\\circ",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-137",
+   "pick": "204_5",
+   "gold": "204_5",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-41",
+   "pick": "17.0",
+   "gold": "17.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-329",
+   "pick": "4.0",
+   "gold": "4.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-280",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-242",
+   "pick": "25238.0",
+   "gold": "\\32,348",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-494",
+   "pick": "1.0",
+   "gold": "\\frac{1}{4}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-300",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-331",
+   "pick": "5.0",
+   "gold": "\\frac{13}{6}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-52",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-271",
+   "pick": "4.0",
+   "gold": "333.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-293",
+   "pick": "(\\frac{3}{5},\\frac{8}{3}]",
+   "gold": "(\\frac{3}{5},\\frac{8}{3}]",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-26",
+   "pick": "576.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-150",
+   "pick": "1.0",
+   "gold": "1.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-407",
+   "pick": "9.0",
+   "gold": "9.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-285",
+   "pick": "3.0",
+   "gold": "440.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-436",
+   "pick": "4.0",
+   "gold": "4.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-470",
+   "pick": "976562.5",
+   "gold": "27648.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-162",
+   "pick": "\\frac{17}{50}",
+   "gold": "\\dfrac{17}{50}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-466",
+   "pick": "8\\pi",
+   "gold": "8\\pi",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-488",
+   "pick": "36.0",
+   "gold": "\\36",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-147",
+   "pick": "2.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-441",
+   "pick": "550.0",
+   "gold": "550.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-324",
+   "pick": "3.0",
+   "gold": "120.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-112",
+   "pick": "13.0",
+   "gold": "13.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-239",
+   "pick": "1.0",
+   "gold": "16.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-276",
+   "pick": "11.0",
+   "gold": "11.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-435",
+   "pick": "(-\\infty,2)\\cup(3,\\infty)",
+   "gold": "(-\\infty,2)\\cup(3,\\infty)",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-475",
+   "pick": "4.0",
+   "gold": "29.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-264",
+   "pick": "5.0",
+   "gold": "1\\frac{4}{5}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-44",
+   "pick": "1.25",
+   "gold": "1.25",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-7",
+   "pick": "79.7",
+   "gold": "90^\\circ",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-183",
+   "pick": "23.0",
+   "gold": "23.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-82",
+   "pick": "\\frac{3}{5}",
+   "gold": "\\frac{3}{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-354",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-245",
+   "pick": "0.0",
+   "gold": "-13x+3",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-327",
+   "pick": "1.0",
+   "gold": "15.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-202",
+   "pick": "\\frac{1}{2}",
+   "gold": "\\frac{2}{3}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-493",
+   "pick": "20.0",
+   "gold": "20.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-32",
+   "pick": "720.0",
+   "gold": "720.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-47",
+   "pick": "5.0",
+   "gold": "5.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-297",
+   "pick": "103.0",
+   "gold": "103.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-254",
+   "pick": "28.0",
+   "gold": "28.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-92",
+   "pick": "\\frac{448}{15625}",
+   "gold": "\\frac{448}{15625}",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-373",
+   "pick": "1+2i",
+   "gold": "1+2i",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-417",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-125",
+   "pick": "-3.0",
+   "gold": "-3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-383",
+   "pick": "[-2,7]",
+   "gold": "x\\in[-2,7]",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-17",
+   "pick": "\\pi",
+   "gold": "\\pi",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-473",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-67",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-398",
+   "pick": "navin",
+   "gold": "navin",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-359",
+   "pick": "2.0",
+   "gold": "6.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-330",
+   "pick": "1940.0",
+   "gold": "1940.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-163",
+   "pick": "-\\frac{35}{9}",
+   "gold": "-\\frac{35}{9}",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-400",
+   "pick": "\\frac{7\\sqrt{2}}{2}",
+   "gold": "\\frac{14}{3}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-25",
+   "pick": "1.0",
+   "gold": "1,-2",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-222",
+   "pick": "96.0",
+   "gold": "54.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-151",
+   "pick": "2.0",
+   "gold": "144.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-328",
+   "pick": "2.0",
+   "gold": "3.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-341",
+   "pick": "-2.0",
+   "gold": "-2.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-100",
+   "pick": "145.0",
+   "gold": "145^\\circ",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-419",
+   "pick": "18.0",
+   "gold": "\\begin{pmatrix}-7\\\\16\\\\5\\end{pmatrix}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-88",
+   "pick": "2.0",
+   "gold": "2.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-159",
+   "pick": "3.21",
+   "gold": "3.21",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-332",
+   "pick": "\\frac{4\\sqrt{3}}{3}",
+   "gold": "2.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-461",
+   "pick": "12.0",
+   "gold": "12.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-425",
+   "pick": "2.0",
+   "gold": "3r^2",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-287",
+   "pick": "300.0",
+   "gold": "36.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-210",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-189",
+   "pick": "280.0",
+   "gold": "160.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-252",
+   "pick": "81.0",
+   "gold": "81.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-186",
+   "pick": "7.0",
+   "gold": "7.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-294",
+   "pick": "58.0",
+   "gold": "58.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-432",
+   "pick": "198.0",
+   "gold": "331.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-381",
+   "pick": "2.0",
+   "gold": "\\frac{1}{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-421",
+   "pick": "0.0",
+   "gold": "27.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-244",
+   "pick": "8.0",
+   "gold": "8.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-299",
+   "pick": "63.0",
+   "gold": "63.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-94",
+   "pick": "70^\\circ",
+   "gold": "80.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-232",
+   "pick": "1996.0",
+   "gold": "\\frac{1997}{2}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-272",
+   "pick": "11330.0",
+   "gold": "1030.0",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-301",
+   "pick": "5.5",
+   "gold": "5.4\\text{cents}",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-158",
+   "pick": "2107.0",
+   "gold": "2107.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-333",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-71",
+   "pick": "5236.0",
+   "gold": "2516_8",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-103",
+   "pick": "1.0",
+   "gold": "(3,4]",
+   "correct": false,
+   "approved": false
+  },
+  {
+   "id": "math500-335",
+   "pick": "3.0",
+   "gold": "3.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-231",
+   "pick": "10.0",
+   "gold": "10.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-69",
+   "pick": "-1.0",
+   "gold": "-1.0",
+   "correct": true,
+   "approved": true
+  },
+  {
+   "id": "math500-382",
+   "pick": "\\frac{20000}{\\pi}",
+   "gold": "\\frac{20000}{\\pi}",
+   "correct": true,
+   "approved": true
+  }
+ ]
+}
