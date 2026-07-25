@@ -78,51 +78,33 @@ def norm(a):
 
 def vllm_style_tree(base, model, question, *, k, trunk_tokens, budget_tokens,
                     max_tokens, suffix):
-    """Fork-after-a-trunk, budget-capped, majority-selected: client side.
+    """What a vLLM user actually writes for best-of-k with selection.
 
-    Every line here is code the user owns. It is not hard code, but it is code
-    they write, test, and keep working across engine upgrades, and it costs an
-    extra round trip on the critical path because the fork decision happens in
-    the client rather than in the scheduler.
+    An earlier version of this function generated a trunk and then re-prompted
+    with it as an assistant turn. That was a STRAWMAN: the model restarted
+    rather than continued, answers were truncated, and the arm scored 7.5 pct
+    on GSM8K where a 1.5B should score around 60. It made AutoTree look 40pp
+    better and the harness flagged it, which is what the equivalence check is
+    for. Publishing that number would have been indefensible.
+
+    This is the fair target: one n=k request, then the user owns extraction,
+    normalization and voting. Same tokens, same work, honest comparison. The
+    remaining difference is the client code they maintain and the round trips.
     """
-    round_trips = 0
-
-    # 1. generate the shared trunk
     r = post(base, "/v1/chat/completions", {
         "model": model,
         "messages": [{"role": "user", "content": question + suffix}],
-        "max_tokens": trunk_tokens, "temperature": 0.7,
+        "n": k, "max_tokens": max_tokens, "temperature": 0.7,
     })
-    round_trips += 1
-    trunk = r["choices"][0]["message"]["content"]
-    spent = r["usage"]["completion_tokens"]
-
-    # 2. re-prompt with the trunk so the engine's prefix cache can share its KV,
-    #    and ask for k continuations. The user has to know to do this.
-    remaining = max(1, min(max_tokens, budget_tokens - spent) // max(1, k))
-    r2 = post(base, "/v1/chat/completions", {
-        "model": model,
-        "messages": [
-            {"role": "user", "content": question + suffix},
-            {"role": "assistant", "content": trunk},
-        ],
-        "n": k, "max_tokens": remaining, "temperature": 0.7,
-    })
-    round_trips += 1
-    spent += r2["usage"]["completion_tokens"]
-
-    # 3. select. The user implements extraction, normalization and voting.
-    answers = [norm(extract(trunk + c["message"]["content"]))
-               for c in r2["choices"]]
+    answers = [norm(extract(c["message"]["content"])) for c in r["choices"]]
     cand = [a for a in answers if a is not None]
     winner = None
     if cand:
         counts = collections.Counter(cand)
         top = max(counts.values())
-        winner = sorted(k_ for k_, v in counts.items() if v == top)[0]
-
-    return {"winner": winner, "answers": answers, "gen_tokens": spent,
-            "round_trips": round_trips}
+        winner = sorted(x for x, v in counts.items() if v == top)[0]
+    return {"winner": winner, "answers": answers,
+            "gen_tokens": r["usage"]["completion_tokens"], "round_trips": 1}
 
 
 # --------------------------------------------------------------------------
