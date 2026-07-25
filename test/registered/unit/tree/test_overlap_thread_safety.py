@@ -72,9 +72,12 @@ def test_forward_path_does_not_import_the_reaping_accessor():
     A future edit that swaps peek_active back to get_active reintroduces the
     race silently, because nothing crashes; it only corrupts under concurrency.
     """
-    # tree_runtime.py lives at .../srt/tree/tree_runtime.py, so parents[1] is srt
-    srt = Path(tree_runtime.__file__).resolve().parents[1]
-    fbi = srt / "model_executor" / "forward_batch_info.py"
+    # Resolve from the REPO, not from the imported module. CI stages a
+    # lightweight sglang namespace that omits model_executor, so deriving the
+    # path from tree_runtime.__file__ would point at a file that is not there
+    # and the check would error instead of guarding.
+    repo = Path(__file__).resolve().parents[4]
+    fbi = repo / "python" / "sglang" / "srt" / "model_executor" / "forward_batch_info.py"
     text = fbi.read_text(encoding="utf-8", errors="replace")
 
     assert "peek_active" in text, "forward path lost the read-only accessor"

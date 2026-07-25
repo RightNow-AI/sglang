@@ -1,27 +1,46 @@
 name: Tree CPU tests
 
+# This workflow previously triggered only on the tree-engine branch, so once
+# AutoTree was consolidated onto main it stopped running entirely. It also
+# covered none of the autotree/ or integrations/ trees, which is how the SDK
+# wire-conformance break and the verl adapter break both reached main unnoticed.
+
 on:
   push:
     branches:
+      - main
       - tree-engine
     paths:
       - "python/sglang/srt/tree/**"
       - "python/sglang/srt/entrypoints/openai/*tree*"
+      - "python/sglang/srt/model_executor/forward_batch_info.py"
+      - "python/sglang/srt/managers/scheduler_components/batch_result_processor.py"
       - "test/registered/unit/tree/**"
+      - "test/registered/unit/tree_api/**"
+      - "integrations/verl_autotree/**"
+      - "autotree/sdk/**"
+      - "bench/e2e/**"
       - ".github/workflows/tree-tests.yml"
   pull_request:
     branches:
+      - main
       - tree-engine
     paths:
       - "python/sglang/srt/tree/**"
       - "python/sglang/srt/entrypoints/openai/*tree*"
+      - "python/sglang/srt/model_executor/forward_batch_info.py"
+      - "python/sglang/srt/managers/scheduler_components/batch_result_processor.py"
       - "test/registered/unit/tree/**"
+      - "test/registered/unit/tree_api/**"
+      - "integrations/verl_autotree/**"
+      - "autotree/sdk/**"
+      - "bench/e2e/**"
       - ".github/workflows/tree-tests.yml"
 
 jobs:
   tree-cpu-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       TREE_CI_NAMESPACE: ${{ runner.temp }}/tree-python
       PYTHONPATH: ${{ runner.temp }}/tree-python
@@ -48,6 +67,53 @@ jobs:
       - name: Run tree CPU tests
         run: python -m pytest test/registered/unit/tree -q
 
+      - name: Run tree API tests
+        run: |
+          if [ -d test/registered/unit/tree_api ]; then
+            python -m pytest test/registered/unit/tree_api -q
+          else
+            echo "no tree_api suite present, skipping"
+          fi
+
+      - name: Stock-traffic parity must stay green
+        run: python -m pytest test/registered/unit/tree/test_autotree_off_parity.py -q
+
+      - name: Acceptance gate compiles and self-describes
+        run: |
+          python -m py_compile bench/e2e/acceptance.py
+          python bench/e2e/acceptance.py --help > /dev/null
+
       - name: Add job summary
         if: always()
-        run: echo "Tree CPU suite completed with Python 3.12 and minimal dependencies (pytest + fastapi + msgspec)." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Tree CPU suite, tree API suite, stock-traffic parity, and the" >> "$GITHUB_STEP_SUMMARY"
+          echo "acceptance gate smoke check ran on Python 3.12." >> "$GITHUB_STEP_SUMMARY"
+
+  autotree-sdk-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the SDK and its test dependencies
+        run: |
+          python -m pip install pytest
+          if [ -f autotree/sdk/pyproject.toml ]; then
+            python -m pip install -e autotree/sdk
+          else
+            echo "no SDK pyproject found, installing pydantic only"
+            python -m pip install pydantic
+          fi
+
+      - name: Run the SDK suite
+        run: |
+          if [ -d autotree/sdk/tests ]; then
+            python -m pytest autotree/sdk/tests -q
+          else
+            echo "no SDK test suite present, skipping"
+          fi
