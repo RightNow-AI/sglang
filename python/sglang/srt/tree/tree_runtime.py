@@ -36,6 +36,7 @@ from sglang.srt.tree.params import (
     DEFAULT_CONSENSUS_INTERVAL,
     DEFAULT_CONSENSUS_WARMUP,
     DEFAULT_MIN_SURVIVORS,
+    TreeBranchEvent,
     normalize_tree_params,
     validate_tree_params,
 )
@@ -182,6 +183,7 @@ class _TreeRun:
         "fork_input_ids", "adaptive_failed", "tail_tokens_saved",
         "parent_output_deferred",
         "last_consensus_check",
+        "events",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -210,6 +212,7 @@ class _TreeRun:
         self.tail_tokens_saved = 0
         self.parent_output_deferred = False
         self.last_consensus_check: Optional[int] = None
+        self.events: list[TreeBranchEvent] = []
 
 
 class SchedulerTreeRuntime:
@@ -228,6 +231,13 @@ class SchedulerTreeRuntime:
         run.branches[str(branch.branch_id)] = branch
         run.branches_by_rid[branch.rid] = branch
         self.branch_index[branch.rid] = run
+        run.events.append(
+            TreeBranchEvent(
+                event="forked",
+                branch_id=str(branch.branch_id),
+                parent_id=None if branch.branch_id == 0 else "0",
+            )
+        )
 
     # -- intake ------------------------------------------------------------
 
@@ -308,12 +318,86 @@ class SchedulerTreeRuntime:
             if not run.branches:
                 self._register_branch(run, _BranchState(req.rid, 0, req))
 
+    @staticmethod
+    def _token_logprobs(token_ids: list[int], logprobs: Any) -> list[Any]:
+        if logprobs is None:
+            return [None] * len(token_ids)
+        if hasattr(logprobs, "__len__") and not isinstance(logprobs, (str, bytes)):
+            values = list(logprobs)
+            if len(values) < len(token_ids):
+                values.extend([None] * (len(token_ids) - len(values)))
+            return values[: len(token_ids)]
+        return [logprobs] * len(token_ids)
+
+    def owns_request(self, req: Any) -> bool:
+        return getattr(req, "rid", None) in self.branch_index
+
+    def commit_token_run(
+        self,
+        req: Any,
+        token_ids: Any,
+        logprobs: Any = None,
+        *,
+        speculative: bool = False,
+    ) -> tuple[list[int], Optional[list[float]]]:
+        """Commit one accepted run token by token, stopping at tree terminalization."""
+        tokens = (
+            list(token_ids)
+            if hasattr(token_ids, "__len__") and not isinstance(token_ids, (str, bytes))
+            else [token_ids]
+        )
+        token_logprobs = self._token_logprobs(tokens, logprobs)
+        run = self.branch_index.get(getattr(req, "rid", None))
+        state = run.branches_by_rid.get(req.rid) if run is not None else None
+        if run is None or state is None:
+            return tokens, None if logprobs is None else token_logprobs
+
+        accepted_tokens: list[int] = []
+        accepted_logprobs: list[float] = []
+        try:
+            for token_id, token_logprob in zip(tokens, token_logprobs):
+                if run.finalized or state.state != "active":
+                    break
+                req.output_ids.append(token_id)
+                self._account_tokens(run, req, [token_id], token_logprob)
+                accepted_tokens.append(token_id)
+                if logprobs is not None:
+                    accepted_logprobs.append(token_logprob)
+                if run.finalized or state.state != "active":
+                    break
+        except Exception:
+            logger.exception("[tree] token-run commit failed for %s", req.rid)
+            remaining = tokens[len(accepted_tokens) :]
+            req.output_ids.extend(remaining)
+            accepted_tokens.extend(remaining)
+            if logprobs is not None:
+                accepted_logprobs.extend(
+                    token_logprobs[len(accepted_logprobs) :]
+                )
+
+        dropped = len(tokens) - len(accepted_tokens)
+        if speculative and dropped:
+            req.kv_committed_len = max(0, req.kv_committed_len - dropped)
+        return accepted_tokens, None if logprobs is None else accepted_logprobs
+
     def on_token(self, req: Any, token_ids, logprob: Optional[float]) -> None:
         run = self.branch_index.get(req.rid)
         if run is None or run.finalized:
             return
         try:
-            self._account_tokens(run, req, token_ids, logprob)
+            tokens = (
+                list(token_ids)
+                if hasattr(token_ids, "__len__")
+                and not isinstance(token_ids, (str, bytes))
+                else [token_ids]
+            )
+            for token_id, token_logprob in zip(
+                tokens, self._token_logprobs(tokens, logprob)
+            ):
+                state = run.branches_by_rid.get(req.rid)
+                if run.finalized or state is None or state.state != "active":
+                    break
+                self._account_tokens(run, req, [token_id], token_logprob)
         except Exception:
             logger.exception("[tree] token hook failed for %s", req.rid)
 
@@ -940,6 +1024,35 @@ class SchedulerTreeRuntime:
                     state.score += float(sum(fresh))
                     state.lp_seen = len(vals)
 
+        token_values = list(token_ids) if hasattr(token_ids, "__len__") else [token_ids]
+        event_logprobs = self._token_logprobs(token_values, logprob)
+        tokenizer = getattr(self.scheduler, "tokenizer", None)
+        for token_id, token_logprob in zip(token_values, event_logprobs):
+            text = None
+            if tokenizer is not None:
+                try:
+                    text = tokenizer.decode([token_id], skip_special_tokens=False)
+                except Exception:
+                    logger.debug(
+                        "[tree] token text decode failed for %s token %s",
+                        req.rid,
+                        token_id,
+                        exc_info=True,
+                    )
+            run.events.append(
+                TreeBranchEvent(
+                    event="token",
+                    branch_id=str(state.branch_id),
+                    token_id=int(token_id),
+                    text=text,
+                    score=(
+                        float(token_logprob)
+                        if token_logprob is not None
+                        else None
+                    ),
+                )
+            )
+
         if state.branch_id == 0:
             self._park_parent_if_complete(run)
 
@@ -957,6 +1070,8 @@ class SchedulerTreeRuntime:
         if state.branch_id == 0:
             if self._maybe_stop_parent_early(run):
                 return
+            if getattr(req, "stream", False) and not run.finalized:
+                self._attach_snapshot(run, include_outputs=True)
             # The finalize-time snapshot rides the parent's stream; when the
             # parent finishes (token cap) before the last sibling, that
             # snapshot has no chunk left to ride and the response ships
@@ -1133,9 +1248,12 @@ class SchedulerTreeRuntime:
         parent = run.branches.get("0")
         if parent is None or parent.req is None:
             return
-        alive = [b for b in run.branches.values() if b.state == "active"]
+        ordered_branches = sorted(
+            run.branches.values(), key=lambda branch: branch.branch_id
+        )
+        alive = [b for b in ordered_branches if b.state == "active"]
         leading = max(
-            (b for b in run.branches.values() if b.tokens),
+            (b for b in ordered_branches if b.tokens),
             key=lambda b: b.mean_logprob(),
             default=None,
         )
@@ -1163,8 +1281,9 @@ class SchedulerTreeRuntime:
                         else {}
                     ),
                 }
-                for b in run.branches.values()
+                for b in ordered_branches
             },
+            "events": [vars(event).copy() for event in run.events],
         }
         if _early_parent_stop_enabled():
             snapshot["tail_tokens_saved"] = run.tail_tokens_saved
@@ -1269,7 +1388,7 @@ class SchedulerTreeRuntime:
             if n_alive <= min_survivors:
                 break
             branch_score = scores[branch.branch_id]
-            if not self._prune_branch(run, branch):
+            if not self._prune_branch(run, branch, reason="consensus"):
                 continue
             killed += 1
             n_alive -= 1
@@ -1286,7 +1405,9 @@ class SchedulerTreeRuntime:
             _autotree_profile_incr("tree.consensus.branches_killed", killed)
 
     @staticmethod
-    def _prune_branch(run: _TreeRun, branch: _BranchState) -> bool:
+    def _prune_branch(
+        run: _TreeRun, branch: _BranchState, reason: str = "policy"
+    ) -> bool:
         """Mark one active branch for the scheduler's normal finish path."""
         if branch.state != "active":
             return False
@@ -1294,6 +1415,14 @@ class SchedulerTreeRuntime:
 
         branch.state = "pruned"
         run.pruned += 1
+        run.events.append(
+            TreeBranchEvent(
+                event="pruned",
+                branch_id=str(branch.branch_id),
+                score=branch.mean_logprob() if branch.tokens else None,
+                reason=reason,
+            )
+        )
         if branch.req is not None:
             branch.req.to_finish = FINISH_LENGTH(length=len(branch.req.output_ids))
         return True
@@ -1328,7 +1457,7 @@ class SchedulerTreeRuntime:
             gap = best - branch.mean_logprob()
             if gap <= VALUE_MARGIN:
                 break
-            self._prune_branch(run, branch)
+            self._prune_branch(run, branch, reason="value")
             n_alive -= 1
             logger.info(
                 "[tree] %s pruned branch-%d at token %d: value gap %.3f "
@@ -1402,12 +1531,30 @@ class SchedulerTreeRuntime:
         from sglang.srt.managers.schedule_batch import FINISH_LENGTH
 
         finish_targets = []
-        for branch in run.branches.values():
+        for branch in sorted(
+            run.branches.values(), key=lambda candidate: candidate.branch_id
+        ):
             if branch.state != "active":
                 continue
             branch.state = "finalized" if branch is winner else "pruned"
             if branch is not winner:
                 run.pruned += 1
+                run.events.append(
+                    TreeBranchEvent(
+                        event="pruned",
+                        branch_id=str(branch.branch_id),
+                        score=branch.mean_logprob() if branch.tokens else None,
+                        reason=reason,
+                    )
+                )
+            else:
+                run.events.append(
+                    TreeBranchEvent(
+                        event="finalized",
+                        branch_id=str(branch.branch_id),
+                        score=branch.mean_logprob() if branch.tokens else None,
+                    )
+                )
             target = branch.req
             if target is None:
                 continue

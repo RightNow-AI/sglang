@@ -86,6 +86,9 @@ def test_non_streaming_response_matches_wire_spec_field_by_field():
             "final_scores": {"b0": -0.1, "b1": -0.4, "b2": -0.7},
             "scorer": "mean-logprob",
             "kv_reuse_ratio": 2.5,
+            "branch_answers": {},
+            "served_from_memo": False,
+            "memo_key": None,
         },
     }
 
