@@ -1725,6 +1725,14 @@ async def tree_verify(request: TreeVerifyRequest, raw_request: Request):
                     "mean_logprob": score["mean_logprob"],
                     "sum_logprob": score["sum_logprob"],
                     "n_tokens": score["n_scored_tokens"],
+                    # [autotree-splice] Per-token values, not just the mean.
+                    # verify_branches already computes these and BranchScore
+                    # carries them; the endpoint used to drop them here, which
+                    # left callers with only mean_logprob. This project has
+                    # measured mean-logprob as useless for correctness (it
+                    # failed three separate ways), so a caller that wants to
+                    # build a real selector needs the per-token sequence.
+                    "token_logprobs": score["token_logprobs"],
                     "error": score["error"],
                 }
                 for score in scores
