@@ -1,0 +1,83 @@
+{
+ "base": "http://127.0.0.1:30000",
+ "model": "Qwen/Qwen2.5-1.5B-Instruct",
+ "checks": [
+  {
+   "name": "server health",
+   "required": true,
+   "passed": true,
+   "detail": "status=200",
+   "seconds": 1.00335693359375
+  },
+  {
+   "name": "stock chat completion (base_url promise)",
+   "required": true,
+   "passed": true,
+   "detail": "tokens=2 text='ok'",
+   "seconds": 1.3189544677734375
+  },
+  {
+   "name": "stock streaming terminates",
+   "required": true,
+   "passed": true,
+   "detail": "chunks=26 terminated=True",
+   "seconds": 0.20348238945007324
+  },
+  {
+   "name": "tree completion returns 200",
+   "required": true,
+   "passed": true,
+   "detail": "status=200 body={\"id\": \"chatcmpl-39d8074cdc494a7187b15980858411a4\", \"object\": \"chat.completion\", \"created\": 1784988835, \"model\": \"Qwen/Q",
+   "seconds": 0.7711594104766846
+  },
+  {
+   "name": "tree branches=1 degenerates cleanly",
+   "required": true,
+   "passed": true,
+   "detail": "status=200",
+   "seconds": 0.09738850593566895
+  },
+  {
+   "name": "malformed tree params rejected 4xx",
+   "required": true,
+   "passed": true,
+   "detail": "all rejected 4xx",
+   "seconds": 0.006439208984375
+  },
+  {
+   "name": "tree token budget enforced",
+   "required": false,
+   "passed": true,
+   "detail": "spent=59 budget=256x4",
+   "seconds": 0.5768322944641113
+  },
+  {
+   "name": "memo stats endpoint",
+   "required": false,
+   "passed": true,
+   "detail": "stats status=200 body={'hits': 0, 'misses': 0, 'hit_rate': 0.0, 'tokens_saved': 0, 'agreement_rate': N",
+   "seconds": 0.0011813640594482422
+  },
+  {
+   "name": "survives abrupt client disconnect",
+   "required": true,
+   "passed": true,
+   "detail": "server healthy after 3 abrupt disconnects (status=200)",
+   "seconds": 4.605547666549683
+  },
+  {
+   "name": "mixed stock + tree concurrent load",
+   "required": true,
+   "passed": true,
+   "detail": "stock=6 tree=3 tree_errors=[]",
+   "seconds": 0.5823040008544922
+  },
+  {
+   "name": "still healthy after all abuse",
+   "required": true,
+   "passed": true,
+   "detail": "post-abuse reply='still-alive'",
+   "seconds": 0.04904794692993164
+  }
+ ]
+}
