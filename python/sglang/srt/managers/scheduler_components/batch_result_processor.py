@@ -713,8 +713,64 @@ class SchedulerBatchResultProcessor:
             next_token_ids=next_token_ids,
         )
 
+        tree_runtime = None
+        tree_committed_indices = set()
+        is_spec = not batch.spec_algorithm.is_none()
+        if is_spec:
+            from sglang.srt.tree.tree_runtime import (  # [autotree-splice-spec]
+                get_active as _tr_get_spec,
+            )
+
+            tree_runtime = _tr_get_spec()
+            if tree_runtime is not None:
+                initially_inactive = {
+                    i
+                    for i, req in enumerate(batch.reqs)
+                    if req.is_retracted or req.finished()
+                }
+                for i, req in enumerate(batch.reqs):
+                    if (
+                        i in initially_inactive
+                        or not tree_runtime.owns_request(req)
+                    ):
+                        continue
+                    offered_tokens = next_token_ids[i]
+                    offered_logprobs = (
+                        next_token_logprobs[i]
+                        if next_token_logprobs is not None
+                        else None
+                    )
+                    accepted_tokens, accepted_logprobs = (
+                        tree_runtime.commit_token_run(
+                            req,
+                            offered_tokens,
+                            offered_logprobs,
+                            speculative=True,
+                        )
+                    )
+                    next_token_ids[i] = accepted_tokens
+                    if next_token_logprobs is not None:
+                        next_token_logprobs[i] = accepted_logprobs
+                    tree_committed_indices.add(i)
+
+                    old_correct = result.num_correct_drafts_per_req_cpu[i]
+                    new_correct = min(
+                        old_correct,
+                        max(0, len(accepted_tokens) - 1),
+                    )
+                    if new_correct != old_correct:
+                        result.num_correct_drafts_per_req_cpu[i] = new_correct
+                        req.spec_num_correct_drafts -= old_correct - new_correct
+                        histogram = req.spec_correct_drafts_histogram
+                        if old_correct < len(histogram) and histogram[old_correct] > 0:
+                            histogram[old_correct] -= 1
+                        req.update_spec_correct_drafts_histogram(new_correct)
+                result.num_correct_drafts = sum(
+                    result.num_correct_drafts_per_req_cpu
+                )
+
         self.metrics_reporter.num_generated_tokens += len(batch.reqs)
-        if not batch.spec_algorithm.is_none():
+        if is_spec:
             self.metrics_reporter.update_spec_metrics(
                 batch.batch_size(),
                 result.num_correct_drafts,
@@ -727,7 +783,6 @@ class SchedulerBatchResultProcessor:
             )
 
         self.token_to_kv_pool_allocator.free_group_begin()
-        tree_runtime = None
 
         for i, req in enumerate(batch.reqs):
             req: Req
@@ -742,11 +797,10 @@ class SchedulerBatchResultProcessor:
             # next_token_id is a per-req list: 1 token for non-spec, the verified
             # run for spec (already grammar-truncated in _resolve_spec_v2_tokens).
             next_token_id = next_token_ids[i]
-            is_spec = not batch.spec_algorithm.is_none()
 
             from sglang.srt.tree.tree_runtime import get_active as _tr_get2  # [autotree-splice-decode]
-            _tr = _tr_get2()
-            if _tr is not None:
+            _tr = tree_runtime or _tr_get2()
+            if _tr is not None and i not in tree_committed_indices:
                 tree_runtime = _tr
                 current_logprobs = (
                     next_token_logprobs[i]
@@ -761,9 +815,18 @@ class SchedulerBatchResultProcessor:
                 next_token_ids[i] = next_token_id
                 if next_token_logprobs is not None:
                     next_token_logprobs[i] = current_logprobs
-            req.output_ids.extend(next_token_id)
-            if _tr is not None:
-                _tr.on_token(req, next_token_id, next_token_logprobs[i] if next_token_logprobs is not None else None)
+            if i not in tree_committed_indices:
+                req.output_ids.extend(next_token_id)
+                if _tr is not None:
+                    _tr.on_token(
+                        req,
+                        next_token_id,
+                        (
+                            next_token_logprobs[i]
+                            if next_token_logprobs is not None
+                            else None
+                        ),
+                    )
             new_accept_len = len(next_token_id)
 
             self._maybe_update_reasoning_tokens(req, next_token_id)

@@ -176,7 +176,7 @@ class OpenAIServingTree(OpenAIServingBase):
         base_request, _ = self.chat_serving._convert_to_internal_request(
             chat_request, raw_request
         )
-        base_request.return_logprob = request.tree.branches > 1
+        base_request.return_logprob = request.tree.branches > 1 or request.stream
         # The scheduler-side tree runtime consumes only numeric logprob values.
         # Avoid detokenizing every returned logprob token in TokenizerManager.
         base_request.return_text_in_logprobs = False
@@ -494,25 +494,113 @@ class OpenAIServingTree(OpenAIServingBase):
     ) -> AsyncGenerator[str, None]:
         token_indices = defaultdict(int)
         saw_result = False
-        async for item in self.tokenizer_manager.generate_request(
+        runtime_event_count = 0
+        source = self.tokenizer_manager.generate_request(
             adapted_request, raw_request
-        ):
-            if isinstance(item, TreeBranchEvent):
-                payload = self._branch_event_payload(item, token_indices)
-                if payload is not None:
-                    yield self._sse(payload.type, payload.model_dump_json())
-                continue
-            if not isinstance(item, TreeResult):
-                raise ValueError("Tree scheduler returned an invalid stream envelope.")
-            if saw_result:
-                raise ValueError("Tree scheduler returned more than one final result.")
-            saw_result = True
-            done = self._done_event(item)
-            yield self._sse(done.type, done.model_dump_json())
+        )
+        try:
+            async for item in source:
+                if isinstance(item, TreeBranchEvent):
+                    payload = self._branch_event_payload(item, token_indices)
+                    if payload is not None:
+                        yield self._sse(payload.type, payload.model_dump_json())
+                    continue
 
-        if not saw_result:
-            raise ValueError("Tree scheduler stream ended without a final result.")
-        yield "data: [DONE]\n\n"
+                if isinstance(item, TreeResult):
+                    for event in item.branch_events:
+                        payload = self._branch_event_payload(event, token_indices)
+                        if payload is not None:
+                            yield self._sse(
+                                payload.type, payload.model_dump_json()
+                            )
+                    result = item
+                elif isinstance(item, dict):
+                    snapshot = self._latest_tree_snapshot(item)
+                    if snapshot is not None:
+                        events = snapshot.get("events") or []
+                        if runtime_event_count > len(events):
+                            raise ValueError(
+                                "Tree scheduler stream event history regressed."
+                            )
+                        for raw_event in events[runtime_event_count:]:
+                            event = self._coerce_branch_event(raw_event)
+                            payload = self._branch_event_payload(
+                                event, token_indices
+                            )
+                            if payload is not None:
+                                yield self._sse(
+                                    payload.type, payload.model_dump_json()
+                                )
+                        runtime_event_count = len(events)
+
+                    finish_reason = (item.get("meta_info") or {}).get(
+                        "finish_reason"
+                    )
+                    if finish_reason is None:
+                        continue
+                    result = self._coerce_plain_result(item, adapted_request)
+                    if result is None:
+                        raise ValueError(
+                            "Tree scheduler returned an invalid stream envelope."
+                        )
+                    tree_completion_tokens = sum(
+                        result.summary.tokens_spent_per_branch.values()
+                    )
+                    if tree_completion_tokens:
+                        result.completion_tokens = tree_completion_tokens
+                else:
+                    raise ValueError(
+                        "Tree scheduler returned an invalid stream envelope."
+                    )
+
+                if saw_result:
+                    raise ValueError(
+                        "Tree scheduler returned more than one final result."
+                    )
+                saw_result = True
+                done = self._done_event(result)
+                yield self._sse(done.type, done.model_dump_json())
+
+            if not saw_result:
+                raise ValueError("Tree scheduler stream ended without a final result.")
+            yield "data: [DONE]\n\n"
+        finally:
+            close = getattr(source, "aclose", None)
+            if callable(close):
+                await close()
+            if not saw_result:
+                abort = getattr(self.tokenizer_manager, "abort_request", None)
+                rid = getattr(getattr(adapted_request, "base", None), "rid", None)
+                if callable(abort) and rid:
+                    abort(rid)
+
+    @staticmethod
+    def _latest_tree_snapshot(item: dict) -> Optional[dict]:
+        snapshots = (item.get("meta_info") or {}).get("autotree")
+        if not isinstance(snapshots, list):
+            return None
+        real = [snapshot for snapshot in snapshots if isinstance(snapshot, dict)]
+        return real[-1] if real else None
+
+    @staticmethod
+    def _coerce_branch_event(raw_event: Any) -> TreeBranchEvent:
+        if isinstance(raw_event, TreeBranchEvent):
+            return raw_event
+        if not isinstance(raw_event, dict):
+            raise ValueError("Tree scheduler returned an invalid branch event.")
+        fields = {
+            key: raw_event.get(key)
+            for key in (
+                "event",
+                "branch_id",
+                "parent_id",
+                "token_id",
+                "text",
+                "score",
+                "reason",
+            )
+        }
+        return TreeBranchEvent(**fields)
 
     def _branch_event_payload(self, event: TreeBranchEvent, token_indices):
         if event.event == "forked":
@@ -520,14 +608,24 @@ class OpenAIServingTree(OpenAIServingBase):
                 branch_id=event.branch_id, parent_id=event.parent_id
             )
         if event.event == "token":
-            if event.text is None or event.score is None:
+            text = event.text
+            if text is None and event.token_id is not None:
+                tokenizer = getattr(self.tokenizer_manager, "tokenizer", None)
+                if tokenizer is not None:
+                    try:
+                        text = tokenizer.decode(
+                            [event.token_id], skip_special_tokens=False
+                        )
+                    except Exception:
+                        text = None
+            if text is None or event.score is None:
                 raise ValueError("Tree token event is missing text or logprob.")
             token_index = token_indices[event.branch_id]
             token_indices[event.branch_id] += 1
             return TreeTokenEvent(
                 branch_id=event.branch_id,
                 token_index=token_index,
-                token=event.text,
+                token=text,
                 token_id=event.token_id,
                 logprob=event.score,
             )
