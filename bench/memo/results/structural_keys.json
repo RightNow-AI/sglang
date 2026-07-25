@@ -1,0 +1,23 @@
+{
+ "multi-turn agent": {
+  "n": 360,
+  "exact": 0.0,
+  "structural": 0.9,
+  "skeleton": 0.9,
+  "structural_ceiling": 10.0
+ },
+ "ReAct tool loop": {
+  "n": 360,
+  "exact": 0.0,
+  "structural": 0.9972,
+  "skeleton": 0.9972,
+  "structural_ceiling": 360.0
+ },
+ "templated business forms": {
+  "n": 400,
+  "exact": 0.0,
+  "structural": 0.9975,
+  "skeleton": 0.9975,
+  "structural_ceiling": 400.0
+ }
+}
