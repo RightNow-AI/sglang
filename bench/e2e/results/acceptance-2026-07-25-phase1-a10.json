@@ -1,0 +1,97 @@
+{
+ "base": "http://127.0.0.1:30000",
+ "model": "Qwen/Qwen2.5-1.5B-Instruct",
+ "checks": [
+  {
+   "name": "server health",
+   "required": true,
+   "passed": true,
+   "detail": "status=200",
+   "seconds": 1.0028610229492188
+  },
+  {
+   "name": "stock chat completion (base_url promise)",
+   "required": true,
+   "passed": true,
+   "detail": "tokens=2 text='ok'",
+   "seconds": 1.3104133605957031
+  },
+  {
+   "name": "stock streaming terminates",
+   "required": true,
+   "passed": true,
+   "detail": "chunks=26 terminated=True",
+   "seconds": 0.20311713218688965
+  },
+  {
+   "name": "tree completion returns 200",
+   "required": true,
+   "passed": true,
+   "detail": "status=200 body={\"id\": \"chatcmpl-ec127911067a419684dfca6ae43a0662\", \"object\": \"chat.completion\", \"created\": 1785006509, \"model\": \"Qwen/Q",
+   "seconds": 0.8259055614471436
+  },
+  {
+   "name": "tree STREAMING emits events and terminates",
+   "required": true,
+   "passed": true,
+   "detail": "chunks=22 terminated=True",
+   "seconds": 0.12382841110229492
+  },
+  {
+   "name": "tree stream disconnect leaves server healthy",
+   "required": true,
+   "passed": true,
+   "detail": "healthy after 2 abandoned tree streams (status=200)",
+   "seconds": 4.108060121536255
+  },
+  {
+   "name": "tree branches=1 degenerates cleanly",
+   "required": true,
+   "passed": true,
+   "detail": "status=200",
+   "seconds": 0.09406447410583496
+  },
+  {
+   "name": "malformed tree params rejected 4xx",
+   "required": true,
+   "passed": true,
+   "detail": "all rejected 4xx",
+   "seconds": 0.0069179534912109375
+  },
+  {
+   "name": "tree token budget enforced",
+   "required": false,
+   "passed": true,
+   "detail": "spent=17 budget=256x4",
+   "seconds": 0.16742658615112305
+  },
+  {
+   "name": "memo stats endpoint",
+   "required": false,
+   "passed": true,
+   "detail": "stats status=200 body={'hits': 0, 'misses': 0, 'hit_rate': 0.0, 'tokens_saved': 0, 'agreement_rate': N",
+   "seconds": 0.0010294914245605469
+  },
+  {
+   "name": "survives abrupt client disconnect",
+   "required": true,
+   "passed": true,
+   "detail": "server healthy after 3 abrupt disconnects (status=200)",
+   "seconds": 4.603158473968506
+  },
+  {
+   "name": "mixed stock + tree concurrent load",
+   "required": true,
+   "passed": true,
+   "detail": "stock=6 tree=3 tree_errors=[]",
+   "seconds": 0.38627004623413086
+  },
+  {
+   "name": "still healthy after all abuse",
+   "required": true,
+   "passed": true,
+   "detail": "post-abuse reply='still-alive'",
+   "seconds": 0.04918026924133301
+  }
+ ]
+}
