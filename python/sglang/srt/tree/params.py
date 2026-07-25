@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import dataclasses
 import math
-import os
+import re
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from sglang.srt.tree.selection import env_int
 
@@ -21,6 +22,7 @@ MAX_BUDGET_TOKENS = 1_000_000
 DEFAULT_CONSENSUS_WARMUP = 64
 DEFAULT_CONSENSUS_INTERVAL = 32
 DEFAULT_MIN_SURVIVORS = 2
+CALLBACK_MAX_TIMEOUT_S = 10.0
 TREE_PARAM_NAMES = frozenset(
     {
         "policy",
@@ -33,8 +35,79 @@ TREE_PARAM_NAMES = frozenset(
         "consensus_warmup",
         "consensus_interval",
         "min_survivors",
+        "verifier",
     }
 )
+
+
+def validate_verifier_block(verifier: Mapping[str, Any]) -> None:
+    """Validate one verifier block before it reaches the scheduler."""
+    if not isinstance(verifier, Mapping):
+        raise ValueError("verifier must be a mapping")
+    verifier_type = verifier.get("type")
+    if verifier_type not in {"regex", "numeric", "callback"}:
+        raise ValueError("verifier type must be regex, numeric, or callback")
+
+    allowed = {
+        "regex": {"type", "pattern", "flags"},
+        "numeric": {"type", "equals", "tolerance"},
+        "callback": {"type", "url", "timeout_s"},
+    }[verifier_type]
+    unknown = sorted(set(verifier) - allowed)
+    if unknown:
+        raise ValueError(f"unknown {verifier_type} verifier field: {unknown[0]}")
+
+    if verifier_type == "regex":
+        pattern = verifier.get("pattern")
+        if not isinstance(pattern, str) or not pattern:
+            raise ValueError("regex verifier pattern must be a non-empty string")
+        flags = verifier.get("flags", "")
+        if flags not in {"", "i"}:
+            raise ValueError("regex verifier flags must be empty or 'i'")
+        try:
+            re.compile(pattern, re.IGNORECASE if flags == "i" else 0)
+        except re.error as error:
+            raise ValueError(f"regex verifier pattern is invalid: {error}") from error
+        return
+
+    if verifier_type == "numeric":
+        equals = verifier.get("equals")
+        if (
+            not isinstance(equals, (int, float))
+            or isinstance(equals, bool)
+            or not math.isfinite(float(equals))
+        ):
+            raise ValueError("numeric verifier equals must be a finite number")
+        tolerance = verifier.get("tolerance")
+        if (
+            not isinstance(tolerance, (int, float))
+            or isinstance(tolerance, bool)
+            or not math.isfinite(float(tolerance))
+            or tolerance < 0
+        ):
+            raise ValueError(
+                "numeric verifier tolerance must be a finite non-negative number"
+            )
+        return
+
+    url = verifier.get("url")
+    if not isinstance(url, str) or not url or len(url) > 2048:
+        raise ValueError("callback verifier url must be a non-empty URL string")
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("callback verifier url must use http or https")
+    timeout_s = verifier.get("timeout_s")
+    if (
+        not isinstance(timeout_s, (int, float))
+        or isinstance(timeout_s, bool)
+        or not math.isfinite(float(timeout_s))
+        or timeout_s <= 0
+        or timeout_s > CALLBACK_MAX_TIMEOUT_S
+    ):
+        raise ValueError(
+            "callback verifier timeout_s must be greater than 0 and at most "
+            f"{CALLBACK_MAX_TIMEOUT_S:g}"
+        )
 
 
 def validate_tree_params(params: Mapping[str, Any]) -> None:
@@ -122,6 +195,10 @@ def validate_tree_params(params: Mapping[str, Any]) -> None:
     ):
         raise ValueError("min_survivors must be a positive integer")
 
+    verifier = params.get("verifier")
+    if verifier is not None:
+        validate_verifier_block(verifier)
+
 
 def normalize_tree_params(params: Mapping[str, Any]) -> Dict[str, Any]:
     """Apply wire defaults and return a validated scheduler parameter dict."""
@@ -138,9 +215,12 @@ def normalize_tree_params(params: Mapping[str, Any]) -> Dict[str, Any]:
         "consensus_warmup": DEFAULT_CONSENSUS_WARMUP,
         "consensus_interval": DEFAULT_CONSENSUS_INTERVAL,
         "min_survivors": DEFAULT_MIN_SURVIVORS,
+        "verifier": None,
     }
     normalized.update(dict(params))
     validate_tree_params(normalized)
+    if normalized["verifier"] is None:
+        normalized.pop("verifier")
     return normalized
 
 
@@ -158,6 +238,7 @@ class TreeParams:
     consensus_warmup: int = DEFAULT_CONSENSUS_WARMUP
     consensus_interval: int = DEFAULT_CONSENSUS_INTERVAL
     min_survivors: int = DEFAULT_MIN_SURVIVORS
+    verifier: Optional[Dict[str, Any]] = None
 
     def validate(self) -> None:
         validate_tree_params(dataclasses.asdict(self))
@@ -165,6 +246,8 @@ class TreeParams:
     def to_runtime_dict(self) -> Dict[str, Any]:
         result = dataclasses.asdict(self)
         validate_tree_params(result)
+        if result["verifier"] is None:
+            result.pop("verifier")
         return result
 
 
@@ -216,9 +299,17 @@ class TreeSummary:
     )
     served_from_memo: bool = False
     memo_key: Optional[str] = None
+    verifier_used: bool = False
+    verifier_approved_count: int = 0
+    verifier_fell_back: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return dataclasses.asdict(self)
+        result = dataclasses.asdict(self)
+        if not self.verifier_used:
+            result.pop("verifier_used")
+            result.pop("verifier_approved_count")
+            result.pop("verifier_fell_back")
+        return result
 
 
 @dataclasses.dataclass

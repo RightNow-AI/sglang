@@ -44,6 +44,7 @@ from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
 from sglang.srt.tree.profile import incr as _autotree_profile_incr
 from sglang.srt.tree.profile import span as _autotree_profile_span
 from sglang.srt.tree.shared_prefix import SharedPrefixGroup
+from sglang.srt.tree.verifier import evaluate_verifier
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,7 @@ class _TreeRun:
         "parent_output_deferred",
         "last_consensus_check",
         "events",
+        "verifier_used", "verifier_approved_count", "verifier_fell_back",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -213,6 +215,9 @@ class _TreeRun:
         self.parent_output_deferred = False
         self.last_consensus_check: Optional[int] = None
         self.events: list[TreeBranchEvent] = []
+        self.verifier_used = params.get("verifier") is not None
+        self.verifier_approved_count = 0
+        self.verifier_fell_back = False
 
 
 class SchedulerTreeRuntime:
@@ -1144,7 +1149,7 @@ class SchedulerTreeRuntime:
         on an answer that the still-running branches can no longer outvote,
         the tree's outcome is decided - finalize immediately and reclaim every
         remaining token. Safe by construction with respect to the final vote."""
-        if run.finalized:
+        if run.finalized or run.verifier_used:
             return
         if (
             _early_parent_stop_enabled()
@@ -1285,6 +1290,14 @@ class SchedulerTreeRuntime:
             },
             "events": [vars(event).copy() for event in run.events],
         }
+        if run.verifier_used:
+            snapshot.update(
+                {
+                    "verifier_used": True,
+                    "verifier_approved_count": run.verifier_approved_count,
+                    "verifier_fell_back": run.verifier_fell_back,
+                }
+            )
         if _early_parent_stop_enabled():
             snapshot["tail_tokens_saved"] = run.tail_tokens_saved
         # The customized_info channel is token-aligned: the output streamer
@@ -1320,6 +1333,8 @@ class SchedulerTreeRuntime:
 
     def _maybe_consensus_prune(self, run: _TreeRun) -> None:
         """Prune live branches that trail the best deterministic agreement score."""
+        if run.verifier_used:
+            return
         if run.finalized or not self._consensus_enabled(run):
             return
         alive = sorted(
@@ -1431,6 +1446,8 @@ class SchedulerTreeRuntime:
         """EMVPT: prune branches whose mean-logprob value proxy trails the best
         sibling by more than VALUE_MARGIN nats/token. Branch 0 is never pruned
         here because its request object carries the wire response."""
+        if run.verifier_used:
+            return
         if run.finalized:
             return
         alive = [b for b in run.branches.values() if b.state == "active"]
@@ -1466,6 +1483,45 @@ class SchedulerTreeRuntime:
                 gap, branch.mean_logprob(), best,
             )
 
+    def _winner_by_existing_rule(
+        self,
+        branches: list[_BranchState],
+        *,
+        allow_weighted_vote: bool,
+    ) -> _BranchState:
+        votes: Dict[str, int] = {}
+        for branch in branches:
+            answer = self._extract_branch_answer(branch)
+            if answer:
+                votes[answer] = votes.get(answer, 0) + 1
+        pool = branches
+        if votes:
+            if allow_weighted_vote and selection.vote_mode() == "weighted":
+                win_key = selection.weighted_winning_key(
+                    (self._extract_branch_answer(branch), branch.mean_logprob())
+                    for branch in branches
+                )
+                voted = [
+                    branch
+                    for branch in branches
+                    if self._extract_branch_answer(branch) == win_key
+                ]
+                if voted:
+                    pool = voted
+            else:
+                top_count = max(votes.values())
+                leaders = {
+                    answer for answer, count in votes.items() if count == top_count
+                }
+                voted = [
+                    branch
+                    for branch in branches
+                    if (self._extract_branch_answer(branch) or "") in leaders
+                ]
+                if voted:
+                    pool = voted
+        return max(pool, key=lambda branch: (branch.mean_logprob(), -branch.branch_id))
+
     def _finalize(self, run: _TreeRun, reason: str) -> None:
         run.finalized = True
         active = [b for b in run.branches.values() if b.state == "active"]
@@ -1477,41 +1533,38 @@ class SchedulerTreeRuntime:
             and self._parent_has_natural_eos(run)
         ):
             self._record_parent_tail_tokens_saved(run)
-        # Self-consistency winner selection: the plurality answer across
-        # finished branches beats confidence-argmax on reasoning tasks, so
-        # vote first and use mean-logprob only to choose among the branches
-        # holding the winning answer (and as the fallback when no branch
-        # yields an extractable answer).
-        votes: Dict[str, int] = {}
-        for b in active:
-            answer = self._extract_branch_answer(b)
-            if answer:
-                votes[answer] = votes.get(answer, 0) + 1
-        pool = active
-        if votes:
-            if selection.vote_mode() == "weighted":
-                # Confidence-weighted class selection (opt-in). The plurality
-                # branch below is the default and stays byte-identical.
-                win_key = selection.weighted_winning_key(
-                    (self._extract_branch_answer(b), b.mean_logprob())
-                    for b in active
+        verifier = run.params.get("verifier")
+        if verifier is None:
+            winner = self._winner_by_existing_rule(
+                active, allow_weighted_vote=True
+            )
+        else:
+            candidates = []
+            for branch in sorted(active, key=lambda item: item.branch_id):
+                answer = self._extract_branch_answer(branch)
+                if answer is not None:
+                    candidates.append((str(branch.branch_id), answer))
+            try:
+                approved_ids = evaluate_verifier(verifier, candidates)
+            except Exception:
+                logger.warning(
+                    "[tree] %s verifier failed; using majority fallback",
+                    run.parent_rid,
+                    exc_info=True,
                 )
-                voted = [
-                    b for b in active
-                    if self._extract_branch_answer(b) == win_key
-                ]
-                if voted:
-                    pool = voted
-            else:
-                top_count = max(votes.values())
-                leaders = {a for a, c in votes.items() if c == top_count}
-                voted = [
-                    b for b in active
-                    if (self._extract_branch_answer(b) or "") in leaders
-                ]
-                if voted:
-                    pool = voted
-        winner = max(pool, key=lambda b: (b.mean_logprob(), -b.branch_id))
+                approved_ids = []
+            approved_lookup = set(approved_ids)
+            approved = [
+                branch
+                for branch in active
+                if str(branch.branch_id) in approved_lookup
+            ]
+            run.verifier_approved_count = len(approved)
+            run.verifier_fell_back = not approved
+            winner = self._winner_by_existing_rule(
+                approved or active,
+                allow_weighted_vote=not approved,
+            )
         run.winner_branch_id = winner.branch_id
         logger.info(
             "[tree] %s finalize (%s): winner=branch-%d spent=%d pruned=%d",

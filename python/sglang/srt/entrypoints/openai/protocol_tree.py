@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_serializer,
+    model_validator,
+)
 
 from sglang.srt.tree.params import (
+    CALLBACK_MAX_TIMEOUT_S,
     DEFAULT_CONSENSUS_INTERVAL,
     DEFAULT_CONSENSUS_WARMUP,
     DEFAULT_MIN_SURVIVORS,
     MAX_BRANCHES,
+    validate_verifier_block,
 )
 
 
@@ -25,6 +33,55 @@ class TreeChatMessage(BaseModel):
 
     role: str = Field(min_length=1)
     content: str
+
+
+class RegexVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    type: Literal["regex"]
+    pattern: str = Field(min_length=1)
+    flags: Literal["", "i"] = ""
+
+    @model_validator(mode="after")
+    def validate_block(self) -> "RegexVerifierParameters":
+        validate_verifier_block(self.model_dump())
+        return self
+
+
+class NumericVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    type: Literal["numeric"]
+    equals: float
+    tolerance: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_block(self) -> "NumericVerifierParameters":
+        validate_verifier_block(self.model_dump())
+        return self
+
+
+class CallbackVerifierParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    type: Literal["callback"]
+    url: str = Field(min_length=1, max_length=2048)
+    timeout_s: float = Field(gt=0, le=CALLBACK_MAX_TIMEOUT_S)
+
+    @model_validator(mode="after")
+    def validate_block(self) -> "CallbackVerifierParameters":
+        validate_verifier_block(self.model_dump())
+        return self
+
+
+VerifierParameters = Annotated[
+    Union[
+        RegexVerifierParameters,
+        NumericVerifierParameters,
+        CallbackVerifierParameters,
+    ],
+    Field(discriminator="type"),
+]
 
 
 class TreeParameters(BaseModel):
@@ -46,6 +103,7 @@ class TreeParameters(BaseModel):
         ge=1,
     )
     min_survivors: int = Field(default=DEFAULT_MIN_SURVIVORS, ge=1)
+    verifier: Optional[VerifierParameters] = None
 
     @model_validator(mode="after")
     def validate_fork_trigger(self) -> "TreeParameters":
@@ -59,6 +117,13 @@ class TreeParameters(BaseModel):
         ):
             raise ValueError("adaptive_width must be greater than branches")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_verifier(self, handler: Any) -> Dict[str, Any]:
+        data = handler(self)
+        if self.verifier is None:
+            data.pop("verifier", None)
+        return data
 
 
 class TreeStreamOptions(BaseModel):
@@ -125,6 +190,18 @@ class TreeSummaryResponse(BaseModel):
     branch_answers: Dict[str, Optional[str]] = {}
     served_from_memo: bool = False
     memo_key: Optional[str] = None
+    verifier_used: bool = False
+    verifier_approved_count: int = Field(default=0, ge=0)
+    verifier_fell_back: bool = False
+
+    @model_serializer(mode="wrap")
+    def serialize_verifier_fields(self, handler: Any) -> Dict[str, Any]:
+        data = handler(self)
+        if not self.verifier_used:
+            data.pop("verifier_used", None)
+            data.pop("verifier_approved_count", None)
+            data.pop("verifier_fell_back", None)
+        return data
 
 
 class TreeResponseMessage(BaseModel):

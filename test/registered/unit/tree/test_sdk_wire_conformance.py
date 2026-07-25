@@ -20,6 +20,7 @@ installed nor the engine importable, and it fails the moment they drift again.
 """
 
 import re
+import sys
 from pathlib import Path
 
 from sglang.test.ci.ci_register import register_cpu_ci
@@ -86,3 +87,44 @@ def test_the_conformance_check_can_actually_see_both_files():
     assert ENGINE_PARAMS.exists(), f"engine params not found at {ENGINE_PARAMS}"
     assert len(engine_fields("TreeSummary")) >= 9
     assert len(sdk_fields("TreeSummary")) >= 9
+
+
+def test_verifier_wire_fields_are_declared_by_engine_and_sdk():
+    summary_fields = {
+        "verifier_used",
+        "verifier_approved_count",
+        "verifier_fell_back",
+    }
+    assert summary_fields <= set(engine_fields("TreeSummary"))
+    assert summary_fields <= set(sdk_fields("TreeSummary"))
+    assert "verifier" in engine_fields("TreeParams")
+    assert "verifier" in sdk_fields("TreeParameters")
+
+
+def test_sdk_tree_summary_accepts_verifier_fields():
+    sys.path.insert(0, str(REPO / "autotree" / "sdk"))
+    try:
+        from autotree_sdk.models import TreeParameters, TreeSummary
+
+        summary = TreeSummary(
+            policy="beam",
+            branch_count=1,
+            pruned_count=0,
+            merged_count=0,
+            winner_branch_id="0",
+            tokens_spent_per_branch={"0": 1},
+            final_scores={"0": -0.1},
+            scorer=None,
+            kv_reuse_ratio=None,
+            verifier_used=True,
+            verifier_approved_count=1,
+            verifier_fell_back=False,
+        )
+        params = TreeParameters(policy="beam", branches=1, budget_tokens=8)
+    finally:
+        sys.path.pop(0)
+
+    assert summary.verifier_used is True
+    assert summary.verifier_approved_count == 1
+    assert summary.verifier_fell_back is False
+    assert "verifier" not in params.model_dump(exclude_none=False)

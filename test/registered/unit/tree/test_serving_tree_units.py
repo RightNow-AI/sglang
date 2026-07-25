@@ -171,6 +171,42 @@ def test_coerce_plain_result_ignores_empty_branch_outputs_when_voting():
     assert result.summary.scorer == "self_consistency"
 
 
+def test_coerce_plain_result_preserves_engine_verifier_winner():
+    serving = serving_without_init(FakeTokenizer())
+    snapshot = {
+        "policy": "beam",
+        "branch_count": 3,
+        "pruned_count": 0,
+        "winner_branch_id": "2",
+        "verifier_used": True,
+        "verifier_approved_count": 1,
+        "verifier_fell_back": False,
+        "branches": {
+            "0": {"tokens": 1, "mean_logprob": -0.1, "output_ids": [1, 99]},
+            "1": {"tokens": 1, "mean_logprob": -0.2, "output_ids": [1, 99]},
+            "2": {"tokens": 1, "mean_logprob": -0.9, "output_ids": [2, 99]},
+        },
+    }
+    plain = {
+        "text": "parent fallback",
+        "meta_info": {
+            "output_ids": [1, 99],
+            "autotree": [snapshot],
+        },
+    }
+    adapted = SimpleNamespace(
+        tree=SimpleNamespace(policy="beam", branches=3, scorer=None)
+    )
+
+    result = serving._coerce_plain_result(plain, adapted)
+
+    assert result.summary.winner_branch_id == "2"
+    assert result.winner_text == "reasoning, answer #### 42"
+    assert result.summary.verifier_used is True
+    assert result.summary.verifier_approved_count == 1
+    assert result.summary.verifier_fell_back is False
+
+
 def test_empty_memo_entry_limit_uses_default(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTOTREE_MEMO_PATH", str(tmp_path / "memo.jsonl"))
     monkeypatch.setenv("AUTOTREE_MEMO_MAX_ENTRIES", "")
