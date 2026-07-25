@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use AutoTree in your research, please cite it as below."
+title: "AutoTree: tree execution for LLM inference"
+authors:
+  - name: "RightNow AI"
+type: software
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-07-20
+url: "https://github.com/RightNow-AI/autotree"
+repository-code: "https://github.com/RightNow-AI/autotree"
+keywords:
+  - llm-inference
+  - kv-cache
+  - tree-search
+  - test-time-compute
+  - triton

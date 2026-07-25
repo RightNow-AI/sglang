@@ -1,0 +1,17 @@
+{{- if and .Values.enterprise.audit.enabled .Values.enterprise.audit.persistence.enabled (not .Values.enterprise.audit.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "autotree.fullname" . }}-audit
+  labels:
+    {{- include "autotree.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.enterprise.audit.persistence.accessModes | nindent 4 }}
+  {{- with .Values.enterprise.audit.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.enterprise.audit.persistence.size }}
+{{- end }}

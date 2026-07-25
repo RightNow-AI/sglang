@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autotree-serve"
+version = "0.1.0"
+description = "OpenAI-compatible API layer for AutoTree engines"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "PyJWT[crypto]>=2.10,<3",
+  "prometheus-client>=0.21,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "openai>=1.58,<3",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.25,<1",
+]
+
+[project.scripts]
+autotree = "autotree_serve.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["autotree_serve"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

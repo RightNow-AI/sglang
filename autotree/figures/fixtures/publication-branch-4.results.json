@@ -1,0 +1,85 @@
+{
+  "schema_version": "thoughtbench.results.v1",
+  "artifact_notice": "FIXTURE DATA ONLY - NOT A BENCHMARK RESULT.",
+  "benchmark_claims_allowed": false,
+  "engine_config": {
+    "model": "Qwen3-32B (fixture slot)",
+    "mode": "tree",
+    "budgets": [
+      {
+        "name": "branches-4",
+        "max_tokens": 4096
+      }
+    ],
+    "tree": {
+      "branches": 4,
+      "policy": "beam",
+      "scorer": "fixture-score"
+    }
+  },
+  "task_set": {
+    "name": "branching-layout-fixture",
+    "provenance": {
+      "kind": "fixture",
+      "source": "Synthetic branching-factor k=4 publication-layout fixture",
+      "license": "Repository license",
+      "notice": "FIXTURE DATA ONLY - NOT A BENCHMARK RESULT."
+    }
+  },
+  "per_seed_metrics": [
+    {
+      "budget_name": "branches-4",
+      "protocol_seed": 11,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.565
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.1,
+        "cost_per_correct_usd": 0.01,
+        "rollout_throughput_per_hour": {
+          "mean": 100.0
+        }
+      }
+    },
+    {
+      "budget_name": "branches-4",
+      "protocol_seed": 22,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.58
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.1,
+        "cost_per_correct_usd": 0.01,
+        "rollout_throughput_per_hour": {
+          "mean": 100.0
+        }
+      }
+    },
+    {
+      "budget_name": "branches-4",
+      "protocol_seed": 33,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.595
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.1,
+        "cost_per_correct_usd": 0.01,
+        "rollout_throughput_per_hour": {
+          "mean": 100.0
+        }
+      }
+    }
+  ],
+  "aggregate_metrics": [
+    {
+      "budget_name": "branches-4"
+    }
+  ],
+  "samples": []
+}

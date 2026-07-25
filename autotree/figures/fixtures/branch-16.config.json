@@ -1,0 +1,43 @@
+{
+  "model": "autotree-deterministic",
+  "base_url": "http://127.0.0.1:18080",
+  "task_set": {
+    "name": "thoughtbench-contract-fixtures",
+    "path": "../../thoughtbench/fixtures/tasks.jsonl",
+    "provenance": {
+      "kind": "fixture",
+      "source": "Bundled synthetic ThoughtBench contract fixtures",
+      "license": "Repository license",
+      "notice": "FIXTURE TASKS ONLY - NOT A REAL BENCHMARK RESULT."
+    }
+  },
+  "k_samples": 1,
+  "seeds": [
+    11,
+    22,
+    33
+  ],
+  "concurrency": 2,
+  "timeout_seconds": 30,
+  "temperature": 0.7,
+  "top_p": 1,
+  "stop": [],
+  "pricing": {
+    "input_per_million_usd": 0.1,
+    "output_per_million_usd": 0.2
+  },
+  "mode": "tree",
+  "output_path": "branch-16.results.json",
+  "budgets": [
+    {
+      "name": "branches-16",
+      "max_tokens": 4,
+      "tree_budget_tokens": 64
+    }
+  ],
+  "tree": {
+    "policy": "beam",
+    "branches": 16,
+    "scorer": "fixture-score"
+  }
+}

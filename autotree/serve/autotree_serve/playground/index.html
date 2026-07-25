@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoTree Playground</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f5f7f2;
+      --muted: #9da8a0;
+      --panel: rgba(17, 24, 22, 0.88);
+      --panel-strong: #131b18;
+      --line: #2b3933;
+      --lime: #b8f36b;
+      --mint: #55d6a7;
+      --amber: #ffc864;
+      --danger: #ff7d7d;
+      --canvas: #0a0f0d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 82% 12%, rgba(85, 214, 167, 0.12), transparent 28rem),
+        radial-gradient(circle at 12% 82%, rgba(184, 243, 107, 0.08), transparent 25rem),
+        var(--canvas);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.2;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    button, textarea, select, input { font: inherit; }
+
+    .shell {
+      position: relative;
+      width: min(1480px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--lime);
+      font: 700 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 62px);
+      line-height: 0.95;
+      letter-spacing: -0.055em;
+    }
+
+    .subtitle {
+      max-width: 540px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 110px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(10, 15, 13, 0.72);
+      font: 700 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 4px rgba(157, 168, 160, 0.08);
+    }
+
+    .status-pill.live { color: var(--lime); }
+    .status-pill.live .status-dot {
+      background: var(--lime);
+      box-shadow: 0 0 0 4px rgba(184, 243, 107, 0.1), 0 0 18px var(--lime);
+    }
+
+    .engine-banner {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 13px 15px;
+      border: 1px solid rgba(184, 243, 107, 0.18);
+      border-radius: 14px;
+      background: rgba(184, 243, 107, 0.055);
+      color: #d9e6dc;
+      font-size: 13px;
+    }
+
+    .engine-tag {
+      padding: 6px 8px;
+      border-radius: 7px;
+      color: #0a0f0d;
+      background: var(--lime);
+      font: 800 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      gap: 18px;
+      min-height: 690px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(18px);
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #ccd4ce;
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.03em;
+    }
+
+    textarea, select, input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      outline: none;
+      color: var(--ink);
+      background: #0c1310;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    textarea:focus, select:focus, input:focus {
+      border-color: rgba(184, 243, 107, 0.7);
+      box-shadow: 0 0 0 3px rgba(184, 243, 107, 0.08);
+    }
+
+    textarea {
+      min-height: 178px;
+      padding: 13px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    select, input { height: 42px; padding: 0 11px; }
+
+    .field { margin-bottom: 15px; }
+    .param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .run-button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 3px;
+      padding: 13px 15px;
+      border: 0;
+      border-radius: 11px;
+      cursor: pointer;
+      color: #09100c;
+      background: var(--lime);
+      font-weight: 850;
+      box-shadow: 0 12px 28px rgba(184, 243, 107, 0.12);
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    .run-button:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .run-button:disabled { cursor: wait; filter: grayscale(0.5); opacity: 0.65; }
+    .run-button.stop { color: #fff; background: #7f3333; }
+    .key-hint { font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; opacity: 0.62; }
+
+    .preview {
+      min-height: 172px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .preview-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .preview-title {
+      overflow: hidden;
+      color: var(--muted);
+      font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preview-state {
+      flex: none;
+      color: var(--mint);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .preview-text {
+      max-height: 190px;
+      margin: 0;
+      overflow: auto;
+      color: #d9e1db;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .workspace { display: grid; grid-template-rows: auto minmax(470px, 1fr); overflow: hidden; }
+
+    .counters {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(92px, 1fr));
+      border-bottom: 1px solid var(--line);
+    }
+
+    .counter {
+      min-height: 76px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+    }
+
+    .counter:last-child { border-right: 0; }
+    .counter-label { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+    .counter-value { display: block; margin-top: 7px; font: 750 22px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .counter[data-hidden="true"] { display: none; }
+
+    .tree-wrap {
+      position: relative;
+      min-height: 0;
+      overflow: auto;
+      background: rgba(5, 9, 7, 0.45);
+    }
+
+    .tree-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      padding: 30px;
+      color: var(--muted);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .tree-empty strong { display: block; margin-bottom: 7px; color: #dbe3dd; font-size: 16px; }
+
+    svg { display: block; min-width: 100%; min-height: 100%; }
+    .edge { fill: none; stroke: #405148; stroke-width: 1.5; }
+    .merge-edge { fill: none; stroke: var(--amber); stroke-width: 1.7; stroke-dasharray: 5 5; opacity: 0.85; }
+    .branch-node { cursor: pointer; }
+    .branch-node rect { fill: #14201b; stroke: #405148; stroke-width: 1.2; transition: width 140ms ease, fill 140ms ease, stroke 140ms ease; }
+    .branch-node:hover rect, .branch-node.selected rect { stroke: var(--lime); }
+    .branch-node.pruned { opacity: 0.45; }
+    .branch-node.pruned rect { fill: #151918; stroke: #58605c; }
+    .branch-node.merged rect { fill: #211d14; stroke: var(--amber); }
+    .branch-node.winner rect { fill: #172718; stroke: var(--lime); stroke-width: 2.2; filter: drop-shadow(0 0 8px rgba(184,243,107,0.25)); }
+    .node-id { fill: var(--ink); font: 750 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .node-meta { fill: var(--muted); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .node-status { fill: var(--mint); font: 800 9px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
+    .branch-node.pruned .node-status { fill: #a4aca7; }
+    .branch-node.merged .node-status { fill: var(--amber); }
+    .branch-node.winner .node-status { fill: var(--lime); }
+    .origin rect { fill: #101714; stroke: #2f4038; }
+    .origin text { fill: var(--muted); font: 700 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+    .error-bar {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 11px;
+      border: 1px solid rgba(255, 125, 125, 0.35);
+      border-radius: 9px;
+      color: #ffd0d0;
+      background: rgba(255, 125, 125, 0.08);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .error-bar.visible { display: block; }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .controls { min-height: auto; }
+      .counters { grid-template-columns: repeat(3, 1fr); }
+      .counter:nth-child(3) { border-right: 0; }
+      .counter:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+    }
+
+    @media (max-width: 620px) {
+      .shell { padding: 16px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .engine-banner { grid-template-columns: 1fr; }
+      .param-grid { grid-template-columns: 1fr; }
+      .counters { grid-template-columns: repeat(2, 1fr); }
+      .counter:nth-child(2n) { border-right: 0; }
+      .counter:nth-child(3) { border-right: 1px solid var(--line); }
+      .counter:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">AutoTree / live branch trace</p>
+        <h1>Watch the tree think.</h1>
+        <p class="subtitle">Paste a problem. See candidate branches grow, prune, merge, and resolve into one answer as the server emits them.</p>
+      </div>
+      <div class="status-pill" id="stream-status"><span class="status-dot"></span><span id="status-text">Ready</span></div>
+    </header>
+
+    <section class="engine-banner" aria-live="polite">
+      <span class="engine-tag" id="engine-tag">Loading</span>
+      <span id="engine-copy">Reading local model metadata. This playground makes no GPU or production-serving claim.</span>
+    </section>
+
+    <div class="layout">
+      <section class="panel controls" aria-label="Tree controls">
+        <div class="field">
+          <label for="prompt">Problem</label>
+          <textarea id="prompt" spellcheck="true">A farmer must cross a river with a fox, a chicken, and grain. The boat holds the farmer and one item. How can everything cross safely?</textarea>
+        </div>
+
+        <div class="param-grid">
+          <div class="field">
+            <label for="policy">Policy</label>
+            <select id="policy">
+              <option value="beam">Beam</option>
+              <option value="best_first">Best first</option>
+              <option value="mcts">MCTS</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="branches">Branches</label>
+            <input id="branches" type="number" min="1" max="64" value="4">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="budget">Total token budget</label>
+          <input id="budget" type="number" min="1" max="1000000" value="96">
+        </div>
+
+        <button class="run-button" id="run" type="button">
+          <span id="run-label">Grow reasoning tree</span>
+          <span class="key-hint">Ctrl ↵</span>
+        </button>
+        <div class="error-bar" id="error" role="alert"></div>
+
+        <div class="preview" aria-live="polite">
+          <div class="preview-head">
+            <span class="preview-title" id="preview-title">Select a branch</span>
+            <span class="preview-state" id="preview-state">waiting</span>
+          </div>
+          <pre class="preview-text" id="preview-text">Branch text will stream here when you select a node.</pre>
+        </div>
+      </section>
+
+      <section class="panel workspace" aria-label="Live reasoning tree">
+        <div class="counters">
+          <div class="counter"><span class="counter-label">Tokens spent</span><span class="counter-value" id="tokens-spent">0</span></div>
+          <div class="counter"><span class="counter-label">Active</span><span class="counter-value" id="active-count">0</span></div>
+          <div class="counter"><span class="counter-label">Pruned</span><span class="counter-value" id="pruned-count">0</span></div>
+          <div class="counter"><span class="counter-label">Prompt usage</span><span class="counter-value" id="prompt-tokens">—</span></div>
+          <div class="counter"><span class="counter-label">Total usage</span><span class="counter-value" id="total-tokens">—</span></div>
+          <div class="counter" id="kv-counter" data-hidden="true"><span class="counter-label">KV reuse</span><span class="counter-value" id="kv-reuse">—</span></div>
+        </div>
+        <div class="tree-wrap">
+          <div class="tree-empty" id="tree-empty"><div><strong>The canvas is ready.</strong>Run a prompt to stream the real server-side branch events.</div></div>
+          <svg id="tree" role="img" aria-label="Live reasoning branch tree"></svg>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    const elements = {
+      prompt: document.getElementById("prompt"),
+      policy: document.getElementById("policy"),
+      branches: document.getElementById("branches"),
+      budget: document.getElementById("budget"),
+      run: document.getElementById("run"),
+      runLabel: document.getElementById("run-label"),
+      error: document.getElementById("error"),
+      tree: document.getElementById("tree"),
+      treeEmpty: document.getElementById("tree-empty"),
+      streamStatus: document.getElementById("stream-status"),
+      statusText: document.getElementById("status-text"),
+      engineTag: document.getElementById("engine-tag"),
+      engineCopy: document.getElementById("engine-copy"),
+      tokensSpent: document.getElementById("tokens-spent"),
+      activeCount: document.getElementById("active-count"),
+      prunedCount: document.getElementById("pruned-count"),
+      promptTokens: document.getElementById("prompt-tokens"),
+      totalTokens: document.getElementById("total-tokens"),
+      kvCounter: document.getElementById("kv-counter"),
+      kvReuse: document.getElementById("kv-reuse"),
+      previewTitle: document.getElementById("preview-title"),
+      previewState: document.getElementById("preview-state"),
+      previewText: document.getElementById("preview-text")
+    };
+
+    const state = {
+      model: null,
+      branches: new Map(),
+      order: [],
+      mergeEdges: [],
+      selectedBranchId: null,
+      tokensSpent: 0,
+      running: false,
+      controller: null
+    };
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function scoreLabel(score) {
+      return Number.isFinite(Number(score)) ? Number(score).toFixed(3) : "—";
+    }
+
+    function setStatus(label, live = false) {
+      elements.statusText.textContent = label;
+      elements.streamStatus.classList.toggle("live", live);
+    }
+
+    function showError(message) {
+      elements.error.textContent = message;
+      elements.error.classList.toggle("visible", Boolean(message));
+    }
+
+    function setRunning(running) {
+      state.running = running;
+      elements.run.classList.toggle("stop", running);
+      elements.runLabel.textContent = running ? "Stop stream" : "Grow reasoning tree";
+      elements.policy.disabled = running;
+      elements.branches.disabled = running;
+      elements.budget.disabled = running;
+    }
+
+    function resetRun() {
+      state.branches.clear();
+      state.order = [];
+      state.mergeEdges = [];
+      state.selectedBranchId = null;
+      state.tokensSpent = 0;
+      elements.tokensSpent.textContent = "0";
+      elements.activeCount.textContent = "0";
+      elements.prunedCount.textContent = "0";
+      elements.promptTokens.textContent = "—";
+      elements.totalTokens.textContent = "—";
+      elements.kvReuse.textContent = "—";
+      elements.kvCounter.dataset.hidden = "true";
+      elements.previewTitle.textContent = "Select a branch";
+      elements.previewState.textContent = "waiting";
+      elements.previewText.textContent = "Branch text will stream here when you select a node.";
+      elements.treeEmpty.hidden = true;
+      showError("");
+      renderTree();
+    }
+
+    function branchDepth(branch) {
+      let depth = 0;
+      let parentId = branch.parentId;
+      const seen = new Set();
+      while (parentId && state.branches.has(parentId) && !seen.has(parentId)) {
+        seen.add(parentId);
+        depth += 1;
+        parentId = state.branches.get(parentId).parentId;
+      }
+      return depth;
+    }
+
+    function renderTree() {
+      const rowHeight = 86;
+      const width = 920;
+      const height = Math.max(470, 44 + state.order.length * rowHeight);
+      const positions = new Map();
+      state.order.forEach((id, index) => {
+        const branch = state.branches.get(id);
+        positions.set(id, { x: 150 + branchDepth(branch) * 225, y: 34 + index * rowHeight });
+      });
+
+      const originY = Math.max(42, Math.min(height / 2 - 24, 190));
+      const edges = [];
+      for (const id of state.order) {
+        const branch = state.branches.get(id);
+        const target = positions.get(id);
+        const source = branch.parentId && positions.has(branch.parentId)
+          ? positions.get(branch.parentId)
+          : { x: 34, y: originY };
+        const sourceWidth = branch.parentId ? 178 : 74;
+        edges.push(`<path class="edge" d="M ${source.x + sourceWidth} ${source.y + 25} C ${source.x + sourceWidth + 38} ${source.y + 25}, ${target.x - 38} ${target.y + 25}, ${target.x} ${target.y + 25}"/>`);
+      }
+
+      for (const merge of state.mergeEdges) {
+        const source = positions.get(merge.from);
+        const target = positions.get(merge.into);
+        if (!source || !target) continue;
+        edges.push(`<path class="merge-edge" marker-end="url(#merge-arrow)" d="M ${source.x + 88} ${source.y + 52} C ${source.x + 135} ${source.y + 76}, ${target.x + 135} ${target.y - 18}, ${target.x + 88} ${target.y}"/>`);
+      }
+
+      const nodes = state.order.map((id) => {
+        const branch = state.branches.get(id);
+        const position = positions.get(id);
+        const nodeWidth = Math.min(350, 178 + branch.tokens * 5);
+        const selected = id === state.selectedBranchId ? " selected" : "";
+        const meta = branch.reason || `${branch.tokens} token${branch.tokens === 1 ? "" : "s"}`;
+        return `<g class="branch-node ${escapeHtml(branch.status)}${selected}" data-branch-id="${escapeHtml(id)}" transform="translate(${position.x} ${position.y})">
+          <rect width="${nodeWidth}" height="52" rx="10"/>
+          <text class="node-id" x="12" y="21">${escapeHtml(id)}</text>
+          <text class="node-status" x="${Math.max(82, nodeWidth - 12)}" y="20" text-anchor="end">${escapeHtml(branch.status)}</text>
+          <text class="node-meta" x="12" y="39">${escapeHtml(meta.slice(0, 48))}</text>
+        </g>`;
+      });
+
+      elements.tree.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      elements.tree.innerHTML = `<defs><marker id="merge-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ffc864"/></marker></defs>
+        <g class="origin" transform="translate(34 ${originY})"><rect width="74" height="50" rx="10"/><text x="37" y="29" text-anchor="middle">prompt</text></g>
+        ${edges.join("")}${nodes.join("")}`;
+      updatePreview();
+    }
+
+    function updateCounters() {
+      const branches = [...state.branches.values()];
+      elements.tokensSpent.textContent = String(state.tokensSpent);
+      elements.activeCount.textContent = String(branches.filter((branch) => branch.status === "active").length);
+      elements.prunedCount.textContent = String(branches.filter((branch) => branch.status === "pruned").length);
+    }
+
+    function updatePreview() {
+      const branch = state.branches.get(state.selectedBranchId);
+      if (!branch) return;
+      elements.previewTitle.textContent = branch.id;
+      elements.previewState.textContent = branch.status;
+      elements.previewText.textContent = branch.text || "No tokens emitted for this branch yet.";
+    }
+
+    function requireBranch(branchId, eventType) {
+      const branch = state.branches.get(branchId);
+      if (!branch) throw new Error(`${eventType} referenced unknown branch ${branchId}`);
+      return branch;
+    }
+
+    function handleTreeEvent(eventType, payload) {
+      if (eventType === "branch_started") {
+        if (state.branches.has(payload.branch_id)) throw new Error(`Branch ${payload.branch_id} started twice`);
+        state.branches.set(payload.branch_id, {
+          id: payload.branch_id,
+          parentId: payload.parent_id,
+          text: "",
+          tokens: 0,
+          status: "active",
+          reason: ""
+        });
+        state.order.push(payload.branch_id);
+        if (!state.selectedBranchId) state.selectedBranchId = payload.branch_id;
+      } else if (eventType === "token") {
+        const branch = requireBranch(payload.branch_id, eventType);
+        if (payload.token_index !== branch.tokens) {
+          throw new Error(`Branch ${payload.branch_id} expected token_index ${branch.tokens}, received ${payload.token_index}`);
+        }
+        branch.text += payload.token;
+        branch.tokens += 1;
+        state.tokensSpent += 1;
+      } else if (eventType === "branch_pruned") {
+        const branch = requireBranch(payload.branch_id, eventType);
+        branch.status = "pruned";
+        branch.reason = `Pruned · ${payload.reason || "engine"}`;
+      } else if (eventType === "branch_merged") {
+        const branch = requireBranch(payload.branch_id, eventType);
+        requireBranch(payload.into_branch_id, eventType);
+        branch.status = "merged";
+        branch.reason = `Merged into ${payload.into_branch_id}`;
+        state.mergeEdges.push({ from: payload.branch_id, into: payload.into_branch_id });
+      } else if (eventType === "done") {
+        const winner = requireBranch(payload.branch_id, eventType);
+        winner.status = "winner";
+        winner.reason = `Winner · score ${scoreLabel(payload.tree.final_scores[payload.branch_id])}`;
+        state.selectedBranchId = payload.branch_id;
+        elements.promptTokens.textContent = String(payload.usage.prompt_tokens);
+        elements.totalTokens.textContent = String(payload.usage.total_tokens);
+        if (payload.tree && payload.tree.kv_reuse_ratio !== null && payload.tree.kv_reuse_ratio !== undefined) {
+          elements.kvCounter.dataset.hidden = "false";
+          elements.kvReuse.textContent = `${(Number(payload.tree.kv_reuse_ratio) * 100).toFixed(1)}%`;
+        }
+        setStatus("Complete", false);
+      }
+      updateCounters();
+      renderTree();
+    }
+
+    function createSseParser(onEvent) {
+      let buffer = "";
+
+      function parseFrame(frame) {
+        if (!frame.trim()) return;
+        let eventType = "message";
+        const dataLines = [];
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) eventType = line.slice(6).trim();
+          if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+        }
+        if (!dataLines.length) return;
+        const payload = JSON.parse(dataLines.join("\n"));
+        onEvent(eventType, payload);
+      }
+
+      return {
+        push(chunk) {
+          buffer += chunk;
+          buffer = buffer.replaceAll("\r\n", "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary >= 0) {
+            parseFrame(buffer.slice(0, boundary));
+            buffer = buffer.slice(boundary + 2);
+            boundary = buffer.indexOf("\n\n");
+          }
+        },
+        finish() {
+          buffer = buffer.replaceAll("\r\n", "\n");
+          parseFrame(buffer);
+          buffer = "";
+        }
+      };
+    }
+
+    async function loadModel() {
+      try {
+        const response = await fetch("/v1/models");
+        if (!response.ok) throw new Error(`Model metadata returned ${response.status}`);
+        const body = await response.json();
+        const model = body.data && body.data[0];
+        if (!model) throw new Error("No model is exposed by this server");
+        state.model = model;
+        const metadata = model.metadata || {};
+        const engine = metadata.engine || "unknown";
+        elements.engineTag.textContent = engine;
+        elements.engineCopy.textContent = `${model.id} · ${metadata.description || "Local engine metadata unavailable."} This is a local CPU demo surface; it does not claim GPU acceleration or production-serving readiness.`;
+        const allowedPolicies = new Set(metadata.tree_policies || []);
+        for (const option of elements.policy.options) option.disabled = allowedPolicies.size > 0 && !allowedPolicies.has(option.value);
+      } catch (error) {
+        elements.engineTag.textContent = "Unavailable";
+        elements.engineCopy.textContent = "Could not read local engine metadata. No GPU or production-serving capability is implied.";
+        showError(error.message);
+      }
+    }
+
+    async function runTree() {
+      if (state.running) {
+        state.controller.abort();
+        return;
+      }
+      const prompt = elements.prompt.value.trim();
+      const branchCount = Number.parseInt(elements.branches.value, 10);
+      const budget = Number.parseInt(elements.budget.value, 10);
+      if (!prompt) return showError("Enter a problem before starting the tree.");
+      if (!state.model) return showError("The local model metadata has not loaded yet.");
+      if (!Number.isInteger(branchCount) || branchCount < 1 || branchCount > 64) return showError("Branches must be between 1 and 64.");
+      if (!Number.isInteger(budget) || budget < 1 || budget > 1000000) return showError("Token budget must be between 1 and 1,000,000.");
+
+      resetRun();
+      setRunning(true);
+      setStatus("Streaming", true);
+      state.controller = new AbortController();
+
+      const request = {
+        model: state.model.id,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: Math.min(4096, Math.max(1, Math.ceil(budget / branchCount))),
+        stream: true,
+        tree: {
+          policy: elements.policy.value,
+          branches: branchCount,
+          budget_tokens: budget,
+          scorer: null
+        }
+      };
+
+      try {
+        const response = await fetch("/v1/tree/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+          body: JSON.stringify(request),
+          signal: state.controller.signal
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error?.message || `Request failed with ${response.status}`);
+        }
+        if (!response.body) throw new Error("This browser did not expose the response stream");
+
+        const parser = createSseParser(handleTreeEvent);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parser.push(decoder.decode(value, { stream: true }));
+        }
+        parser.push(decoder.decode());
+        parser.finish();
+      } catch (error) {
+        if (error.name === "AbortError") {
+          setStatus("Stopped", false);
+        } else {
+          setStatus("Error", false);
+          showError(error.message);
+        }
+      } finally {
+        setRunning(false);
+        state.controller = null;
+      }
+    }
+
+    elements.run.addEventListener("click", runTree);
+    elements.prompt.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") runTree();
+    });
+    elements.tree.addEventListener("click", (event) => {
+      const node = event.target.closest("[data-branch-id]");
+      if (!node) return;
+      state.selectedBranchId = node.dataset.branchId;
+      renderTree();
+    });
+
+    loadModel();
+  </script>
+</body>
+</html>

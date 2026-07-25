@@ -1,0 +1,15 @@
+{
+  "label": "release-accuracy-vllm-bestof4",
+  "engine_label": "vLLM best-of-4",
+  "model": "replace-with-served-model",
+  "base_url": "http://vllm.example.invalid:8000",
+  "arm": "best_of_n",
+  "task_file": "../tasks/gsm8k_test.jsonl",
+  "output_dir": "../results",
+  "n": 4,
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "seeds": [101, 102, 103],
+  "concurrency": 8,
+  "timeout": 120
+}

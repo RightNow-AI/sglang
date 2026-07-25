@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thoughtbench"
+version = "0.1.0"
+description = "Honest OpenAI-compatible benchmark harness for AutoTree and baselines"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "autotree-sdk",
+  "httpx>=0.28,<1",
+  "jsonschema>=4.23,<5",
+  "pydantic>=2.10,<3",
+  "pyyaml>=6.0,<7",
+]
+
+[project.scripts]
+thoughtbench = "thoughtbench.cli:main"
+
+[dependency-groups]
+dev = [
+  "autotree-serve",
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<9",
+  "uvicorn>=0.34,<1",
+]
+
+[tool.uv.sources]
+autotree-sdk = { path = "../sdk", editable = true }
+autotree-serve = { path = "../serve", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["thoughtbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

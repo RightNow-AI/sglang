@@ -1,0 +1,250 @@
+{
+  "schema_version": "thoughtbench.results.v1",
+  "artifact_notice": "FIXTURE DATA ONLY - NOT A BENCHMARK RESULT.",
+  "benchmark_claims_allowed": false,
+  "engine_config": {
+    "model": "Qwen3-8B",
+    "mode": "tree",
+    "budgets": [
+      {
+        "name": "tokens-1024",
+        "max_tokens": 1024
+      },
+      {
+        "name": "tokens-2048",
+        "max_tokens": 2048
+      },
+      {
+        "name": "tokens-4096",
+        "max_tokens": 4096
+      },
+      {
+        "name": "tokens-8192",
+        "max_tokens": 8192
+      }
+    ],
+    "tree": {
+      "branches": 8,
+      "policy": "beam",
+      "scorer": "fixture-score"
+    }
+  },
+  "task_set": {
+    "name": "publication-layout-fixture",
+    "provenance": {
+      "kind": "fixture",
+      "source": "Synthetic Qwen3-8B / AutoTree publication-layout fixture",
+      "license": "Repository license",
+      "notice": "FIXTURE DATA ONLY - NOT A BENCHMARK RESULT."
+    }
+  },
+  "per_seed_metrics": [
+    {
+      "budget_name": "tokens-1024",
+      "protocol_seed": 11,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.234
+        },
+        "input_tokens": 256,
+        "output_tokens": 1024,
+        "total_cost_usd": 0.01916928,
+        "cost_per_correct_usd": 0.00256,
+        "rollout_throughput_per_hour": {
+          "mean": 1486.464
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-1024",
+      "protocol_seed": 22,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.246
+        },
+        "input_tokens": 256,
+        "output_tokens": 1024,
+        "total_cost_usd": 0.02015232,
+        "cost_per_correct_usd": 0.00256,
+        "rollout_throughput_per_hour": {
+          "mean": 1548.4
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-1024",
+      "protocol_seed": 33,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.258
+        },
+        "input_tokens": 256,
+        "output_tokens": 1024,
+        "total_cost_usd": 0.02113536,
+        "cost_per_correct_usd": 0.00256,
+        "rollout_throughput_per_hour": {
+          "mean": 1610.336
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-2048",
+      "protocol_seed": 11,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.329
+        },
+        "input_tokens": 256,
+        "output_tokens": 2048,
+        "total_cost_usd": 0.04635689,
+        "cost_per_correct_usd": 0.0044032,
+        "rollout_throughput_per_hour": {
+          "mean": 1486.464
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-2048",
+      "protocol_seed": 22,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.341
+        },
+        "input_tokens": 256,
+        "output_tokens": 2048,
+        "total_cost_usd": 0.04804772,
+        "cost_per_correct_usd": 0.0044032,
+        "rollout_throughput_per_hour": {
+          "mean": 1548.4
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-2048",
+      "protocol_seed": 33,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.353
+        },
+        "input_tokens": 256,
+        "output_tokens": 2048,
+        "total_cost_usd": 0.04973855,
+        "cost_per_correct_usd": 0.0044032,
+        "rollout_throughput_per_hour": {
+          "mean": 1610.336
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-4096",
+      "protocol_seed": 11,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.424
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.08475116,
+        "cost_per_correct_usd": 0.0062464,
+        "rollout_throughput_per_hour": {
+          "mean": 1486.464
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-4096",
+      "protocol_seed": 22,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.436
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.08714977,
+        "cost_per_correct_usd": 0.0062464,
+        "rollout_throughput_per_hour": {
+          "mean": 1548.4
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-4096",
+      "protocol_seed": 33,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.448
+        },
+        "input_tokens": 256,
+        "output_tokens": 4096,
+        "total_cost_usd": 0.08954839,
+        "cost_per_correct_usd": 0.0062464,
+        "rollout_throughput_per_hour": {
+          "mean": 1610.336
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-8192",
+      "protocol_seed": 11,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.519
+        },
+        "input_tokens": 256,
+        "output_tokens": 8192,
+        "total_cost_usd": 0.13435208,
+        "cost_per_correct_usd": 0.0080896,
+        "rollout_throughput_per_hour": {
+          "mean": 1486.464
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-8192",
+      "protocol_seed": 22,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.531
+        },
+        "input_tokens": 256,
+        "output_tokens": 8192,
+        "total_cost_usd": 0.13745848,
+        "cost_per_correct_usd": 0.0080896,
+        "rollout_throughput_per_hour": {
+          "mean": 1548.4
+        }
+      }
+    },
+    {
+      "budget_name": "tokens-8192",
+      "protocol_seed": 33,
+      "metrics": {
+        "accuracy_at_k": {
+          "16": 0.543
+        },
+        "input_tokens": 256,
+        "output_tokens": 8192,
+        "total_cost_usd": 0.14056489,
+        "cost_per_correct_usd": 0.0080896,
+        "rollout_throughput_per_hour": {
+          "mean": 1610.336
+        }
+      }
+    }
+  ],
+  "aggregate_metrics": [
+    {
+      "budget_name": "tokens-1024"
+    },
+    {
+      "budget_name": "tokens-2048"
+    },
+    {
+      "budget_name": "tokens-4096"
+    },
+    {
+      "budget_name": "tokens-8192"
+    }
+  ],
+  "samples": []
+}

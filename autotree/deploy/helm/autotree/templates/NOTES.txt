@@ -1,0 +1,6 @@
+AutoTree is available inside the cluster at:
+  http://{{ include "autotree.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+The HPA reads the Pods custom metric {{ .Values.autoscaling.metricName }}. Configure
+Prometheus Adapter before enabling autoscaling; docs/enterprise/install-k8s.md includes
+the matching adapter rule.

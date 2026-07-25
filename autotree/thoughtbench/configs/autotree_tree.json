@@ -1,0 +1,17 @@
+{
+  "label": "autotree-tree",
+  "engine_label": "AutoTree",
+  "model": "replace-with-served-model",
+  "base_url": "http://autotree.example.invalid:8000",
+  "arm": "tree",
+  "task_file": "../tasks/gsm8k_subset.jsonl",
+  "output_dir": "../results",
+  "branches": 4,
+  "budget_tokens": 1024,
+  "policy": "beam",
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "seeds": [11, 22, 33],
+  "concurrency": 8,
+  "timeout": 120
+}

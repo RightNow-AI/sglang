@@ -1,0 +1,777 @@
+{
+  "aggregate_metrics": [
+    {
+      "accuracy_at_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "budget_name": "branches-16",
+      "cost_per_correct_usd": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "kv_reuse_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "latency_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03345874999649823,
+        "mean": 0.027687766657133277,
+        "minimum": 0.024046349979471415,
+        "spread": 0.009412400017026812
+      },
+      "pass_power_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "rollout_throughput_per_hour_mean": {
+        "count": 3,
+        "maximum": 179688.70096895815,
+        "mean": 154141.4991548927,
+        "minimum": 108276.51614458398,
+        "spread": 71412.18482437417
+      },
+      "seed_count": 3,
+      "tokens_per_correct": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "tokens_per_second_mean": {
+        "count": 3,
+        "maximum": 3194.465795003701,
+        "mean": 2740.293318309203,
+        "minimum": 1924.9158425703818,
+        "spread": 1269.549952433319
+      },
+      "ttft_mean_seconds": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "useful_token_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      }
+    }
+  ],
+  "artifact_notice": "FIXTURE TASKS ONLY - NOT A REAL BENCHMARK RESULT.",
+  "benchmark_claims_allowed": false,
+  "engine_config": {
+    "base_url": "http://127.0.0.1:18080/",
+    "budgets": [
+      {
+        "max_tokens": 4,
+        "name": "branches-16",
+        "tree_budget_tokens": 64
+      }
+    ],
+    "concurrency": 2,
+    "k_samples": 1,
+    "mode": "tree",
+    "model": "autotree-deterministic",
+    "pricing": {
+      "input_per_million_usd": 0.1,
+      "output_per_million_usd": 0.2
+    },
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "stop": [],
+    "temperature": 0.7,
+    "top_p": 1.0,
+    "tree": {
+      "branches": 16,
+      "policy": "beam",
+      "scorer": "fixture-score"
+    }
+  },
+  "environment": {
+    "autotree_sdk_version": "0.1.0",
+    "autotree_serve_version": "0.1.0",
+    "generated_at_utc": "2026-07-18T21:46:50.424884+00:00",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "thoughtbench_version": "0.1.0"
+  },
+  "per_seed_metrics": [
+    {
+      "budget_name": "branches-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.03677529998822138,
+          "mean": 0.025558199995430186,
+          "minimum": 0.014341100002638996,
+          "p50": 0.025558199995430186,
+          "p95": 0.03565358998894226,
+          "spread": 0.02243419998558238
+        },
+        "output_tokens": 128,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 251026.76916955752,
+          "mean": 174459.28035113594,
+          "minimum": 97891.79153271436,
+          "p50": 174459.28035113594,
+          "p95": 243370.02028771534,
+          "spread": 153134.97763684316
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 4462.6981185699115,
+          "mean": 3101.498317353528,
+          "minimum": 1740.2985161371441,
+          "p50": 3101.498317353528,
+          "p95": 4326.578138448273,
+          "spread": 2722.399602432767
+        },
+        "total_cost_usd": 2.76e-05,
+        "ttft_seconds": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 11
+    },
+    {
+      "budget_name": "branches-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.03611290000844747,
+          "mean": 0.03345874999649823,
+          "minimum": 0.030804599984548986,
+          "p50": 0.03345874999649823,
+          "p95": 0.035847485007252544,
+          "spread": 0.005308300023898482
+        },
+        "output_tokens": 128,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 116865.66297909056,
+          "mean": 108276.51614458398,
+          "minimum": 99687.3693100774,
+          "p50": 108276.51614458398,
+          "p95": 116006.7482956399,
+          "spread": 17178.29366901316
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 2077.611786294943,
+          "mean": 1924.9158425703818,
+          "minimum": 1772.2198988458204,
+          "p50": 1924.9158425703818,
+          "p95": 2062.342191922487,
+          "spread": 305.3918874491228
+        },
+        "total_cost_usd": 2.76e-05,
+        "ttft_seconds": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 22
+    },
+    {
+      "budget_name": "branches-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.0338680999702774,
+          "mean": 0.024046349979471415,
+          "minimum": 0.014224599988665432,
+          "p50": 0.024046349979471415,
+          "p95": 0.0328859249711968,
+          "spread": 0.019643499981611967
+        },
+        "output_tokens": 128,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 253082.6879398073,
+          "mean": 179688.70096895815,
+          "minimum": 106294.713998109,
+          "p50": 179688.70096895815,
+          "p95": 245743.28924272239,
+          "spread": 146787.97394169832
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 4499.247785596574,
+          "mean": 3194.465795003701,
+          "minimum": 1889.6838044108267,
+          "p50": 3194.465795003701,
+          "p95": 4368.769586537287,
+          "spread": 2609.5639811857477
+        },
+        "total_cost_usd": 2.76e-05,
+        "ttft_seconds": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 33
+    }
+  ],
+  "run_fingerprint": "8b238cab16f5464087d90e20be6274d8170b0521c05e86287c010fda062d9235",
+  "run_id": "90886c6f-01ab-41c3-8731-00a3763d565b",
+  "samples": [
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.03677529998822138,
+      "prompt_tokens": 12,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "checks branch tree reason",
+      "rollout_throughput_per_hour": 97891.79153271436,
+      "sample_index": 0,
+      "sample_key": "bde5f750fc75a41437c9d079cfcc7e4e1cbab35916fbd9e1324f83172f2b8723",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 1740.2985161371441,
+      "total_tokens": 76,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.93642,
+          "branch-1": 0.486108,
+          "branch-10": 0.901404,
+          "branch-11": 0.256443,
+          "branch-12": 0.802162,
+          "branch-13": 0.402888,
+          "branch-14": 0.433966,
+          "branch-15": 0.741204,
+          "branch-2": 0.076913,
+          "branch-3": 0.179042,
+          "branch-4": 0.955021,
+          "branch-5": 0.462809,
+          "branch-6": 0.769744,
+          "branch-7": 0.462758,
+          "branch-8": 0.031757,
+          "branch-9": 0.671616
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-4"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.014341100002638996,
+      "prompt_tokens": 8,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "fork fork evidence path",
+      "rollout_throughput_per_hour": 251026.76916955752,
+      "sample_index": 0,
+      "sample_key": "270b65e818161890afb90fc530c037557c276f3a7c1cfa5c184f995c651a63ea",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 4462.6981185699115,
+      "total_tokens": 72,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.542087,
+          "branch-1": 0.520274,
+          "branch-10": 0.562889,
+          "branch-11": 0.065231,
+          "branch-12": 0.171213,
+          "branch-13": 0.06506,
+          "branch-14": 0.969531,
+          "branch-15": 0.31429,
+          "branch-2": 0.763082,
+          "branch-3": 0.723947,
+          "branch-4": 0.08838,
+          "branch-5": 0.266805,
+          "branch-6": 0.69345,
+          "branch-7": 0.172906,
+          "branch-8": 0.340288,
+          "branch-9": 0.756002
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-14"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.03611290000844747,
+      "prompt_tokens": 12,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "reason prune evidence score",
+      "rollout_throughput_per_hour": 99687.3693100774,
+      "sample_index": 0,
+      "sample_key": "54ba711d151b1651b87d0f59ba4ecf18c7b69285b39898fccb280b90a7492c89",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 1772.2198988458204,
+      "total_tokens": 76,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.249745,
+          "branch-1": 0.317407,
+          "branch-10": 0.249392,
+          "branch-11": 0.657894,
+          "branch-12": 0.488231,
+          "branch-13": 0.162545,
+          "branch-14": 0.235547,
+          "branch-15": 0.733933,
+          "branch-2": 0.731222,
+          "branch-3": 0.472824,
+          "branch-4": 0.709843,
+          "branch-5": 0.590201,
+          "branch-6": 0.39209,
+          "branch-7": 0.158246,
+          "branch-8": 0.20826,
+          "branch-9": 0.376291
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-15"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.030804599984548986,
+      "prompt_tokens": 8,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "evidence verify branch evidence",
+      "rollout_throughput_per_hour": 116865.66297909056,
+      "sample_index": 0,
+      "sample_key": "4ee27dc2f1deed8b3f079892057ed648f7cc4151e8ded5e48baec07a989d617b",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 2077.611786294943,
+      "total_tokens": 72,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.400903,
+          "branch-1": 0.206332,
+          "branch-10": 0.434343,
+          "branch-11": 0.766041,
+          "branch-12": 0.991219,
+          "branch-13": 0.721149,
+          "branch-14": 0.359404,
+          "branch-15": 0.306869,
+          "branch-2": 0.623868,
+          "branch-3": 0.306265,
+          "branch-4": 0.449006,
+          "branch-5": 0.844562,
+          "branch-6": 0.195462,
+          "branch-7": 0.979968,
+          "branch-8": 0.088858,
+          "branch-9": 0.651113
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-12"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.0338680999702774,
+      "prompt_tokens": 12,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "prune fork tree reason",
+      "rollout_throughput_per_hour": 106294.713998109,
+      "sample_index": 0,
+      "sample_key": "94366c274fde060ba648450cf5be6a56b899f73783d9400a9a59fc0771aed3db",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 1889.6838044108267,
+      "total_tokens": 76,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.051737,
+          "branch-1": 0.536949,
+          "branch-10": 0.676093,
+          "branch-11": 0.869436,
+          "branch-12": 0.267257,
+          "branch-13": 0.400262,
+          "branch-14": 0.248938,
+          "branch-15": 0.910027,
+          "branch-2": 0.073445,
+          "branch-3": 0.784817,
+          "branch-4": 0.042163,
+          "branch-5": 0.317505,
+          "branch-6": 0.532301,
+          "branch-7": 0.977501,
+          "branch-8": 0.393288,
+          "branch-9": 0.396286
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-7"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "branches-16",
+      "completion_tokens": 64,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.014224599988665432,
+      "prompt_tokens": 8,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "verify path fork tree",
+      "rollout_throughput_per_hour": 253082.6879398073,
+      "sample_index": 0,
+      "sample_key": "f56a04469e07f364d73b5c2e6f48142c345e592c8c3d62b113a4c47e4df36433",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 4499.247785596574,
+      "total_tokens": 72,
+      "tree": {
+        "branch_count": 16,
+        "final_scores": {
+          "branch-0": 0.707259,
+          "branch-1": 0.595858,
+          "branch-10": 0.877982,
+          "branch-11": 0.894594,
+          "branch-12": 0.218929,
+          "branch-13": 0.378488,
+          "branch-14": 0.752616,
+          "branch-15": 0.261434,
+          "branch-2": 0.70855,
+          "branch-3": 0.533283,
+          "branch-4": 0.130488,
+          "branch-5": 0.477997,
+          "branch-6": 0.681133,
+          "branch-7": 0.154464,
+          "branch-8": 0.793593,
+          "branch-9": 0.818199
+        },
+        "merged_count": 7,
+        "policy": "beam",
+        "pruned_count": 8,
+        "scorer": "fixture-score",
+        "tokens_spent_per_branch": {
+          "branch-0": 4,
+          "branch-1": 4,
+          "branch-10": 4,
+          "branch-11": 4,
+          "branch-12": 4,
+          "branch-13": 4,
+          "branch-14": 4,
+          "branch-15": 4,
+          "branch-2": 4,
+          "branch-3": 4,
+          "branch-4": 4,
+          "branch-5": 4,
+          "branch-6": 4,
+          "branch-7": 4,
+          "branch-8": 4,
+          "branch-9": 4
+        },
+        "winner_branch_id": "branch-11"
+      },
+      "ttft_seconds": null,
+      "useful_token_ratio": null
+    }
+  ],
+  "schema_version": "thoughtbench.results.v1",
+  "task_set": {
+    "name": "thoughtbench-contract-fixtures",
+    "provenance": {
+      "kind": "fixture",
+      "license": "Repository license",
+      "notice": "FIXTURE TASKS ONLY - NOT A REAL BENCHMARK RESULT.",
+      "source": "Bundled synthetic ThoughtBench contract fixtures"
+    },
+    "sha256": "4cba1ad356aa46161dc25fc89d746470f1711d3840e4473ff79687161a5d99fc",
+    "task_count": 2
+  }
+}

@@ -286,3 +286,6 @@ artifacts/
 
 # Internal, non-published docs
 internal-docs/
+
+# AutoTree private measurement ledgers - never push to the public fork
+autotree/AGENTS-GOALs/

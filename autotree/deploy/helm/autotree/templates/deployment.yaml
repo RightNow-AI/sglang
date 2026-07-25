@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "autotree.fullname" . }}
+  labels:
+    {{- include "autotree.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "autotree.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "autotree.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: autotree-serve
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - --engine
+            - {{ .Values.engine | quote }}
+            - --model
+            - {{ .Values.model | quote }}
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --kv-branch-headroom
+            - {{ .Values.kvBranchHeadroom | quote }}
+            {{- if .Values.kvPages }}
+            - --kv-pages
+            - {{ .Values.kvPages | quote }}
+            {{- end }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "autotree.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- if .Values.enterprise.apiKeys.existingSecret }}
+            - name: AUTOTREE_API_KEYS_FILE
+              value: /etc/autotree/auth/api-keys.json
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.enterprise.apiKeys.existingSecret }}
+            - name: api-keys
+              mountPath: /etc/autotree/auth
+              readOnly: true
+            {{- end }}
+            {{- if .Values.enterprise.audit.enabled }}
+            - name: audit
+              mountPath: {{ dir .Values.enterprise.audit.path | quote }}
+            {{- end }}
+            {{- if .Values.hfCache.enabled }}
+            - name: hf-cache
+              mountPath: /home/autotree/.cache/huggingface
+            {{- end }}
+      volumes:
+        {{- if .Values.enterprise.apiKeys.existingSecret }}
+        - name: api-keys
+          secret:
+            secretName: {{ .Values.enterprise.apiKeys.existingSecret }}
+            items:
+              - key: {{ .Values.enterprise.apiKeys.key }}
+                path: api-keys.json
+        {{- end }}
+        {{- if .Values.enterprise.audit.enabled }}
+        - name: audit
+          {{- if .Values.enterprise.audit.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-audit" (include "autotree.fullname" .)) .Values.enterprise.audit.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.hfCache.enabled }}
+        - name: hf-cache
+          emptyDir:
+            {{- toYaml .Values.hfCache.emptyDir | nindent 12 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

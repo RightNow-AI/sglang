@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "autotree.fullname" . }}
+  labels:
+    {{- include "autotree.labels" . | nindent 4 }}
+data:
+  AUTOTREE_TENANT_QUOTAS: {{ toJson .Values.enterprise.quotas | quote }}
+  AUTOTREE_QUOTA_WINDOW_SECONDS: {{ .Values.enterprise.quotaWindowSeconds | quote }}
+  AUTOTREE_OIDC_JWKS_URL: {{ .Values.enterprise.oidc.jwksUrl | quote }}
+  AUTOTREE_OIDC_ISSUER: {{ .Values.enterprise.oidc.issuer | quote }}
+  AUTOTREE_OIDC_AUDIENCE: {{ .Values.enterprise.oidc.audience | quote }}
+  AUTOTREE_OIDC_ALGORITHMS: {{ .Values.enterprise.oidc.algorithms | quote }}
+  {{- if .Values.enterprise.audit.enabled }}
+  AUTOTREE_AUDIT_LOG: {{ .Values.enterprise.audit.path | quote }}
+  {{- end }}

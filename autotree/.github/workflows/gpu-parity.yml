@@ -1,0 +1,42 @@
+name: GPU parity
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: gpu-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Phase 1 requires the self-hosted H100 runner provisioned by AUTOTREE-002.
+# Until that runner is registered with the gpu-h100 label, dispatches remain queued.
+# This workflow contains no fallback or synthetic success path.
+jobs:
+  phase-1-gpu-parity:
+    runs-on: [self-hosted, gpu-h100]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: core/uv.lock
+      - name: Create Python 3.12 environment
+        working-directory: core
+        run: uv venv --python 3.12 --clear
+      - name: Install core development and Triton dependencies
+        working-directory: core
+        run: uv pip install -e ".[dev,triton]"
+      - name: Verify H100 CUDA availability
+        working-directory: core
+        run: >-
+          uv run --no-sync python -c
+          "import torch; assert torch.cuda.is_available(), 'CUDA is unavailable on the gpu-h100 runner'; name=torch.cuda.get_device_name(0); assert 'H100' in name, f'expected an H100, found {name}'; print(f'GPU parity runner: {name}')"
+      - name: Run core tests without the parity harness
+        working-directory: core
+        run: uv run --no-sync pytest -q tests/kv tests/kernels --ignore=tests/kernels/test_triton_parity.py
+      - name: Run the Triton parity harness
+        working-directory: core
+        run: uv run --no-sync pytest -q tests/kernels/test_triton_parity.py

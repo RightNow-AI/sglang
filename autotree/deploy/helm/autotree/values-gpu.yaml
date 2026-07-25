@@ -1,0 +1,25 @@
+# The repository's root Dockerfile is CPU-only. Set image.repository and image.tag
+# to a separately built Linux GPU image before using this overlay.
+image:
+  repository: autotree-gpu
+  tag: local
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: "4"
+    memory: 32Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "8"
+    memory: 64Gi
+    nvidia.com/gpu: "1"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+hfCache:
+  enabled: true
+  emptyDir: {}

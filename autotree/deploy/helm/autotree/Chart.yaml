@@ -1,0 +1,6 @@
+apiVersion: v2
+name: autotree
+description: Helm packaging for the autotree-serve HTTP server
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

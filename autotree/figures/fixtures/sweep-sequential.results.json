@@ -1,0 +1,1898 @@
+{
+  "aggregate_metrics": [
+    {
+      "accuracy_at_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "budget_name": "tokens-2",
+      "cost_per_correct_usd": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "kv_reuse_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "latency_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03527799999574199,
+        "mean": 0.027700166654540226,
+        "minimum": 0.023463849996915087,
+        "spread": 0.011814149998826906
+      },
+      "pass_power_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "rollout_throughput_per_hour_mean": {
+        "count": 3,
+        "maximum": 193896.2145825185,
+        "mean": 163157.7138231493,
+        "minimum": 102178.62719835865,
+        "spread": 91717.58738415985
+      },
+      "seed_count": 3,
+      "tokens_per_correct": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "tokens_per_second_mean": {
+        "count": 3,
+        "maximum": 107.72011921251027,
+        "mean": 90.64317434619404,
+        "minimum": 56.76590399908814,
+        "spread": 50.95421521342213
+      },
+      "ttft_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03447129996493459,
+        "mean": 0.026907833312482882,
+        "minimum": 0.02274474999285303,
+        "spread": 0.011726549972081557
+      },
+      "useful_token_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      }
+    },
+    {
+      "accuracy_at_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "budget_name": "tokens-4",
+      "cost_per_correct_usd": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "kv_reuse_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "latency_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03132755000842735,
+        "mean": 0.027549400004014995,
+        "minimum": 0.021622350002871826,
+        "spread": 0.009705200005555525
+      },
+      "pass_power_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "rollout_throughput_per_hour_mean": {
+        "count": 3,
+        "maximum": 204594.97101676493,
+        "mean": 147002.65479620858,
+        "minimum": 115179.78791083908,
+        "spread": 89415.18310592585
+      },
+      "seed_count": 3,
+      "tokens_per_correct": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "tokens_per_second_mean": {
+        "count": 3,
+        "maximum": 227.32774557418327,
+        "mean": 163.33628310689843,
+        "minimum": 127.97754212315454,
+        "spread": 99.35020345102873
+      },
+      "ttft_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03075979999266565,
+        "mean": 0.026956749992677942,
+        "minimum": 0.020860749995335937,
+        "spread": 0.009899049997329712
+      },
+      "useful_token_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      }
+    },
+    {
+      "accuracy_at_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "budget_name": "tokens-8",
+      "cost_per_correct_usd": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "kv_reuse_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "latency_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03931404996546917,
+        "mean": 0.02522451666300185,
+        "minimum": 0.013101400021696463,
+        "spread": 0.026212649943772703
+      },
+      "pass_power_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "rollout_throughput_per_hour_mean": {
+        "count": 3,
+        "maximum": 275000.31285905326,
+        "mean": 184660.12214384353,
+        "minimum": 91626.87455957194,
+        "spread": 183373.43829948132
+      },
+      "seed_count": 3,
+      "tokens_per_correct": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "tokens_per_second_mean": {
+        "count": 3,
+        "maximum": 611.1118063534517,
+        "mean": 410.355826986319,
+        "minimum": 203.61527679904876,
+        "spread": 407.49652955440297
+      },
+      "ttft_mean_seconds": {
+        "count": 3,
+        "maximum": 0.03710539999883622,
+        "mean": 0.023478949995478615,
+        "minimum": 0.011403050011722371,
+        "spread": 0.02570234998711385
+      },
+      "useful_token_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      }
+    },
+    {
+      "accuracy_at_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "budget_name": "tokens-16",
+      "cost_per_correct_usd": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "kv_reuse_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "latency_mean_seconds": {
+        "count": 3,
+        "maximum": 0.0310514000011608,
+        "mean": 0.025803433343147237,
+        "minimum": 0.02020050003193319,
+        "spread": 0.010850899969227612
+      },
+      "pass_power_k": {
+        "1": {
+          "count": 3,
+          "maximum": 0.0,
+          "mean": 0.0,
+          "minimum": 0.0,
+          "spread": 0.0
+        }
+      },
+      "rollout_throughput_per_hour_mean": {
+        "count": 3,
+        "maximum": 214739.4631149731,
+        "mean": 172068.72154903607,
+        "minimum": 118600.49074719753,
+        "spread": 96138.97236777557
+      },
+      "seed_count": 3,
+      "tokens_per_correct": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      },
+      "tokens_per_second_mean": {
+        "count": 3,
+        "maximum": 954.3976138443247,
+        "mean": 764.7498735512714,
+        "minimum": 527.1132922097669,
+        "spread": 427.28432163455784
+      },
+      "ttft_mean_seconds": {
+        "count": 3,
+        "maximum": 0.02833514998201281,
+        "mean": 0.02330868332258736,
+        "minimum": 0.018368299992289394,
+        "spread": 0.009966849989723414
+      },
+      "useful_token_ratio_mean": {
+        "count": 0,
+        "maximum": null,
+        "mean": null,
+        "minimum": null,
+        "spread": null
+      }
+    }
+  ],
+  "artifact_notice": "FIXTURE TASKS ONLY - NOT A REAL BENCHMARK RESULT.",
+  "benchmark_claims_allowed": false,
+  "engine_config": {
+    "base_url": "http://127.0.0.1:18080/",
+    "budgets": [
+      {
+        "max_tokens": 2,
+        "name": "tokens-2",
+        "tree_budget_tokens": null
+      },
+      {
+        "max_tokens": 4,
+        "name": "tokens-4",
+        "tree_budget_tokens": null
+      },
+      {
+        "max_tokens": 8,
+        "name": "tokens-8",
+        "tree_budget_tokens": null
+      },
+      {
+        "max_tokens": 16,
+        "name": "tokens-16",
+        "tree_budget_tokens": null
+      }
+    ],
+    "concurrency": 2,
+    "k_samples": 1,
+    "mode": "sequential",
+    "model": "autotree-deterministic",
+    "pricing": {
+      "input_per_million_usd": 0.1,
+      "output_per_million_usd": 0.2
+    },
+    "seeds": [
+      11,
+      22,
+      33
+    ],
+    "stop": [],
+    "temperature": 0.7,
+    "top_p": 1.0,
+    "tree": null
+  },
+  "environment": {
+    "autotree_sdk_version": "0.1.0",
+    "autotree_serve_version": "0.1.0",
+    "generated_at_utc": "2026-07-18T21:46:51.239045+00:00",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "thoughtbench_version": "0.1.0"
+  },
+  "per_seed_metrics": [
+    {
+      "budget_name": "tokens-2",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.034130899992305785,
+          "mean": 0.023463849996915087,
+          "minimum": 0.012796800001524389,
+          "p50": 0.023463849996915087,
+          "p95": 0.033064194992766714,
+          "spread": 0.021334099990781397
+        },
+        "output_tokens": 4,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 281320.330049009,
+          "mean": 193398.29968857075,
+          "minimum": 105476.26932813249,
+          "p50": 193398.29968857075,
+          "p95": 272528.12701296515,
+          "spread": 175844.0607208765
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 156.28907224944945,
+          "mean": 107.44349982698375,
+          "minimum": 58.597927404518046,
+          "p50": 107.44349982698375,
+          "p95": 151.4045150072029,
+          "spread": 97.6911448449314
+        },
+        "total_cost_usd": 2.8e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03307129995664582,
+          "mean": 0.02274474999285303,
+          "minimum": 0.012418200029060245,
+          "p50": 0.02274474999285303,
+          "p95": 0.03203864496026654,
+          "spread": 0.020653099927585572
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 11
+    },
+    {
+      "budget_name": "tokens-2",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.03623659996083006,
+          "mean": 0.024358649970963597,
+          "minimum": 0.012480699981097132,
+          "p50": 0.024358649970963597,
+          "p95": 0.03504880496184341,
+          "spread": 0.02375589997973293
+        },
+        "output_tokens": 4,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 288445.360072147,
+          "mean": 193896.2145825185,
+          "minimum": 99347.06909289001,
+          "p50": 193896.2145825185,
+          "p95": 278990.44552318414,
+          "spread": 189098.29097925697
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 160.24742226230387,
+          "mean": 107.72011921251027,
+          "minimum": 55.192816162716674,
+          "p50": 107.72011921251027,
+          "p95": 154.9946919573245,
+          "spread": 105.0546060995872
+        },
+        "total_cost_usd": 2.8e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03515409998362884,
+          "mean": 0.023507449979661033,
+          "minimum": 0.011860799975693226,
+          "p50": 0.023507449979661033,
+          "p95": 0.03398943498323206,
+          "spread": 0.023293300007935613
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 22
+    },
+    {
+      "budget_name": "tokens-2",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.036546099989209324,
+          "mean": 0.03527799999574199,
+          "minimum": 0.03400990000227466,
+          "p50": 0.03527799999574199,
+          "p95": 0.03641928998986259,
+          "spread": 0.002536199986934662
+        },
+        "output_tokens": 4,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 105851.53145875828,
+          "mean": 102178.62719835865,
+          "minimum": 98505.722937959,
+          "p50": 102178.62719835865,
+          "p95": 105484.24103271832,
+          "spread": 7345.808520799284
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 58.80640636597683,
+          "mean": 56.76590399908814,
+          "minimum": 54.72540163219944,
+          "p50": 56.76590399908814,
+          "p95": 58.602356129287955,
+          "spread": 4.081004733777384
+        },
+        "total_cost_usd": 2.8e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03581789997406304,
+          "mean": 0.03447129996493459,
+          "minimum": 0.033124699955806136,
+          "p50": 0.03447129996493459,
+          "p95": 0.03568323997315019,
+          "spread": 0.0026932000182569027
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 33
+    },
+    {
+      "budget_name": "tokens-4",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.030953200010117143,
+          "mean": 0.021622350002871826,
+          "minimum": 0.01229149999562651,
+          "p50": 0.021622350002871826,
+          "p95": 0.03002011500939261,
+          "spread": 0.018661700014490634
+        },
+        "output_tokens": 8,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 292885.32736288744,
+          "mean": 204594.97101676493,
+          "minimum": 116304.61467064243,
+          "p50": 204594.97101676493,
+          "p95": 284056.2917282752,
+          "spread": 176580.71269224503
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 325.4281415143194,
+          "mean": 227.32774557418327,
+          "minimum": 129.22734963404716,
+          "p50": 227.32774557418327,
+          "p95": 315.6181019203058,
+          "spread": 196.20079188027225
+        },
+        "total_cost_usd": 3.6000000000000003e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.030168799974489957,
+          "mean": 0.020860749995335937,
+          "minimum": 0.011552700016181916,
+          "p50": 0.020860749995335937,
+          "p95": 0.029237994976574554,
+          "spread": 0.01861609995830804
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 11
+    },
+    {
+      "budget_name": "tokens-4",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.032830099982675165,
+          "mean": 0.03132755000842735,
+          "minimum": 0.02982500003417954,
+          "p50": 0.03132755000842735,
+          "p95": 0.03267984498525038,
+          "spread": 0.0030050999484956264
+        },
+        "output_tokens": 8,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 120704.10715421256,
+          "mean": 115179.78791083908,
+          "minimum": 109655.46866746561,
+          "p50": 115179.78791083908,
+          "p95": 120151.67522987521,
+          "spread": 11048.638486746946
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 134.11567461579173,
+          "mean": 127.97754212315454,
+          "minimum": 121.83940963051735,
+          "p50": 127.97754212315454,
+          "p95": 133.501861366528,
+          "spread": 12.27626498527438
+        },
+        "total_cost_usd": 3.6000000000000003e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03244069998618215,
+          "mean": 0.03075979999266565,
+          "minimum": 0.029078899999149144,
+          "p50": 0.03075979999266565,
+          "p95": 0.0322726099868305,
+          "spread": 0.0033617999870330095
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 22
+    },
+    {
+      "budget_name": "tokens-4",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.030019099998753518,
+          "mean": 0.029698300000745803,
+          "minimum": 0.02937750000273809,
+          "p50": 0.029698300000745803,
+          "p95": 0.029987019998952747,
+          "spread": 0.0006415999960154295
+        },
+        "output_tokens": 8,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 122542.76230667916,
+          "mean": 121233.20546102173,
+          "minimum": 119923.6486153643,
+          "p50": 121233.20546102173,
+          "p95": 122411.80662211342,
+          "spread": 2619.113691314851
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 136.15862478519907,
+          "mean": 134.70356162335747,
+          "minimum": 133.2484984615159,
+          "p50": 134.70356162335747,
+          "p95": 136.0131184690149,
+          "spread": 2.9101263236831585
+        },
+        "total_cost_usd": 3.6000000000000003e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.02956689998973161,
+          "mean": 0.02924969999003224,
+          "minimum": 0.02893249999033287,
+          "p50": 0.02924969999003224,
+          "p95": 0.02953517998976167,
+          "spread": 0.0006343999993987381
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 33
+    },
+    {
+      "budget_name": "tokens-8",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.03295520000392571,
+          "mean": 0.02325810000183992,
+          "minimum": 0.01356099999975413,
+          "p50": 0.02325810000183992,
+          "p95": 0.03198549000371713,
+          "spread": 0.01939420000417158
+        },
+        "output_tokens": 16,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 265467.1484451936,
+          "mean": 187353.17901290543,
+          "minimum": 109239.20958061727,
+          "p50": 187353.17901290543,
+          "p95": 257655.75150196478,
+          "spread": 156227.93886457634
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 589.9269965448747,
+          "mean": 416.3403978064565,
+          "minimum": 242.7537990680384,
+          "p50": 416.3403978064565,
+          "p95": 572.5683366710329,
+          "spread": 347.17319747683626
+        },
+        "total_cost_usd": 5.2e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03176829998847097,
+          "mean": 0.021928399975877255,
+          "minimum": 0.012088499963283539,
+          "p50": 0.021928399975877255,
+          "p95": 0.0307843099872116,
+          "spread": 0.019679800025187433
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 11
+    },
+    {
+      "budget_name": "tokens-8",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.01347240002360195,
+          "mean": 0.013101400021696463,
+          "minimum": 0.012730400019790977,
+          "p50": 0.013101400021696463,
+          "p95": 0.013435300023411402,
+          "spread": 0.000742000003810972
+        },
+        "output_tokens": 16,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 282787.6574501474,
+          "mean": 275000.31285905326,
+          "minimum": 267212.9682679592,
+          "p50": 275000.31285905326,
+          "p95": 282008.92299103795,
+          "spread": 15574.689182188187
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 628.417016555883,
+          "mean": 611.1118063534517,
+          "minimum": 593.8065961510204,
+          "p50": 611.1118063534517,
+          "p95": 626.6864955356399,
+          "spread": 34.61042040486268
+        },
+        "total_cost_usd": 5.2e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.011423600022681057,
+          "mean": 0.011403050011722371,
+          "minimum": 0.011382500000763685,
+          "p50": 0.011403050011722371,
+          "p95": 0.011421545021585188,
+          "spread": 4.110002191737294e-05
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 22
+    },
+    {
+      "budget_name": "tokens-8",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.0402907999814488,
+          "mean": 0.03931404996546917,
+          "minimum": 0.038337299949489534,
+          "p50": 0.03931404996546917,
+          "p95": 0.040193124979850836,
+          "spread": 0.0019535000319592655
+        },
+        "output_tokens": 16,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 93903.32664906242,
+          "mean": 91626.87455957194,
+          "minimum": 89350.42247008145,
+          "p50": 91626.87455957194,
+          "p95": 93675.68144011337,
+          "spread": 4552.904178980971
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 208.67405922013873,
+          "mean": 203.61527679904876,
+          "minimum": 198.55649437795878,
+          "p50": 203.61527679904876,
+          "p95": 208.1681809780297,
+          "spread": 10.117564842179945
+        },
+        "total_cost_usd": 5.2e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03806440002517775,
+          "mean": 0.03710539999883622,
+          "minimum": 0.03614639997249469,
+          "p50": 0.03710539999883622,
+          "p95": 0.037968500022543594,
+          "spread": 0.0019180000526830554
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 33
+    },
+    {
+      "budget_name": "tokens-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.028531700023449957,
+          "mean": 0.02020050003193319,
+          "minimum": 0.01186930004041642,
+          "p50": 0.02020050003193319,
+          "p95": 0.02769858002429828,
+          "spread": 0.016662399983033538
+        },
+        "output_tokens": 32,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 303303.4793746522,
+          "mean": 214739.4631149731,
+          "minimum": 126175.44685529398,
+          "p50": 214739.4631149731,
+          "p95": 294447.07774868427,
+          "spread": 177128.0325193582
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 1348.015463887343,
+          "mean": 954.3976138443247,
+          "minimum": 560.7797638013066,
+          "p50": 954.3976138443247,
+          "p95": 1308.653678883041,
+          "spread": 787.2357000860364
+        },
+        "total_cost_usd": 8.400000000000001e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.026463499991223216,
+          "mean": 0.018368299992289394,
+          "minimum": 0.010273099993355572,
+          "p50": 0.018368299992289394,
+          "p95": 0.02565397999132983,
+          "spread": 0.016190399997867644
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 11
+    },
+    {
+      "budget_name": "tokens-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.039169700001366436,
+          "mean": 0.026158399996347725,
+          "minimum": 0.013147099991329014,
+          "p50": 0.026158399996347725,
+          "p95": 0.03786857000086456,
+          "spread": 0.026022600010037422
+        },
+        "output_tokens": 32,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 273824.6459199618,
+          "mean": 182866.2107849376,
+          "minimum": 91907.77564991343,
+          "p50": 182866.2107849376,
+          "p95": 264728.80240645935,
+          "spread": 181916.87027004838
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 1216.9984263109413,
+          "mean": 812.7387145997227,
+          "minimum": 408.4790028885041,
+          "p50": 812.7387145997227,
+          "p95": 1176.5724551398193,
+          "spread": 808.5194234224373
+        },
+        "total_cost_usd": 8.400000000000001e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.035378400003537536,
+          "mean": 0.02322259999345988,
+          "minimum": 0.011066799983382225,
+          "p50": 0.02322259999345988,
+          "p95": 0.034162820002529765,
+          "spread": 0.02431160002015531
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 22
+    },
+    {
+      "budget_name": "tokens-16",
+      "metrics": {
+        "accuracy_at_k": {
+          "1": 0.0
+        },
+        "correct_sample_count": 0,
+        "cost_per_correct_usd": null,
+        "input_tokens": 20,
+        "kv_reuse_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        },
+        "latency_seconds": {
+          "count": 2,
+          "maximum": 0.0357048999867402,
+          "mean": 0.0310514000011608,
+          "minimum": 0.0263979000155814,
+          "p50": 0.0310514000011608,
+          "p95": 0.03523954998818226,
+          "spread": 0.009306999971158803
+        },
+        "output_tokens": 32,
+        "pass_power_k": {
+          "1": 0.0
+        },
+        "rollout_throughput_per_hour": {
+          "count": 2,
+          "maximum": 136374.48425348586,
+          "mean": 118600.49074719753,
+          "minimum": 100826.4972409092,
+          "p50": 118600.49074719753,
+          "p95": 134597.08490285702,
+          "spread": 35547.98701257666
+        },
+        "sample_count": 2,
+        "task_count": 2,
+        "tokens_per_correct": null,
+        "tokens_per_second": {
+          "count": 2,
+          "maximum": 606.1088189043817,
+          "mean": 527.1132922097669,
+          "minimum": 448.11776551515203,
+          "p50": 527.1132922097669,
+          "p95": 598.2092662349203,
+          "spread": 157.99105338922965
+        },
+        "total_cost_usd": 8.400000000000001e-06,
+        "ttft_seconds": {
+          "count": 2,
+          "maximum": 0.03203379997285083,
+          "mean": 0.02833514998201281,
+          "minimum": 0.024636499991174787,
+          "p50": 0.02833514998201281,
+          "p95": 0.03166393497376702,
+          "spread": 0.007397299981676042
+        },
+        "useful_token_ratio": {
+          "count": 0,
+          "maximum": null,
+          "mean": null,
+          "minimum": null,
+          "p50": null,
+          "p95": null,
+          "spread": null
+        }
+      },
+      "protocol_seed": 33
+    }
+  ],
+  "run_fingerprint": "a4ddb568790def78616ae29636c02ee2f031adf6e44a84a20700710a0a03b1a1",
+  "run_id": "7e9e0275-3c8f-4250-adbc-4cd025c9b95c",
+  "samples": [
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.01186930004041642,
+      "prompt_tokens": 12,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "score score prune clear merge fork path score evidence reason clear merge fork tree token score",
+      "rollout_throughput_per_hour": 303303.4793746522,
+      "sample_index": 0,
+      "sample_key": "daa5baf366c1b2a9c8b9bac3dd2ca6a9ff99947ada0400fb9af7afa52f9b30b3",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 1348.015463887343,
+      "total_tokens": 28,
+      "tree": null,
+      "ttft_seconds": 0.010273099993355572,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.028531700023449957,
+      "prompt_tokens": 8,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "tree score clear branch checks clear reuse checks evidence branch prune branch evidence clear evidence clear",
+      "rollout_throughput_per_hour": 126175.44685529398,
+      "sample_index": 0,
+      "sample_key": "17f7b33cfb9eb57dc295a9a6fa9265c7db52638f0d3512173932c5d47acd4b9e",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 560.7797638013066,
+      "total_tokens": 24,
+      "tree": null,
+      "ttft_seconds": 0.026463499991223216,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.013147099991329014,
+      "prompt_tokens": 12,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "path prune reuse score score checks path checks reuse evidence fork tree token branch fork evidence",
+      "rollout_throughput_per_hour": 273824.6459199618,
+      "sample_index": 0,
+      "sample_key": "2bc819eae20d1f1adab7f4ac10502b0fe7bc10521c4477c422a95a561652984a",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 1216.9984263109413,
+      "total_tokens": 28,
+      "tree": null,
+      "ttft_seconds": 0.011066799983382225,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.039169700001366436,
+      "prompt_tokens": 8,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "tree verify reuse score prune reason tree evidence reuse clear branch clear score tree checks checks",
+      "rollout_throughput_per_hour": 91907.77564991343,
+      "sample_index": 0,
+      "sample_key": "52f8f8702def750d642c368abbbbef5c2fa36e9b7004c50d049ae1a8aadbc00c",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 408.4790028885041,
+      "total_tokens": 24,
+      "tree": null,
+      "ttft_seconds": 0.035378400003537536,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.0357048999867402,
+      "prompt_tokens": 12,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "score branch branch fork evidence tree checks reason score fork path merge verify prune score tree",
+      "rollout_throughput_per_hour": 100826.4972409092,
+      "sample_index": 0,
+      "sample_key": "6a39e551e480f9750879611d630bbfc880005188956777c4a8c541d7253f387e",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 448.11776551515203,
+      "total_tokens": 28,
+      "tree": null,
+      "ttft_seconds": 0.03203379997285083,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-16",
+      "completion_tokens": 16,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.0263979000155814,
+      "prompt_tokens": 8,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "reason branch reason branch evidence path clear clear verify token score fork merge checks branch path",
+      "rollout_throughput_per_hour": 136374.48425348586,
+      "sample_index": 0,
+      "sample_key": "68e8a58c5336e5c2501d53ceae1c4764571691f097554231c090ff33885fdad6",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 606.1088189043817,
+      "total_tokens": 24,
+      "tree": null,
+      "ttft_seconds": 0.024636499991174787,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.034130899992305785,
+      "prompt_tokens": 12,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "score score",
+      "rollout_throughput_per_hour": 105476.26932813249,
+      "sample_index": 0,
+      "sample_key": "3ce687412a2fb573f2a04da35ca9c4791f473b033650a9135b522fc7bb820e89",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 58.597927404518046,
+      "total_tokens": 14,
+      "tree": null,
+      "ttft_seconds": 0.03307129995664582,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.012796800001524389,
+      "prompt_tokens": 8,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "tree score",
+      "rollout_throughput_per_hour": 281320.330049009,
+      "sample_index": 0,
+      "sample_key": "4efdf6734d83d724c41229928a852b764f30bc5cfbc7f5a14cb49e02dc1159d1",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 156.28907224944945,
+      "total_tokens": 10,
+      "tree": null,
+      "ttft_seconds": 0.012418200029060245,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.03623659996083006,
+      "prompt_tokens": 12,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "path prune",
+      "rollout_throughput_per_hour": 99347.06909289001,
+      "sample_index": 0,
+      "sample_key": "56609974e0facfacf159907d2391a30eb3cad7706dd2fcbf11b661ce36183466",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 55.192816162716674,
+      "total_tokens": 14,
+      "tree": null,
+      "ttft_seconds": 0.03515409998362884,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.012480699981097132,
+      "prompt_tokens": 8,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "tree verify",
+      "rollout_throughput_per_hour": 288445.360072147,
+      "sample_index": 0,
+      "sample_key": "1d75691b7f2f156cacf168f60bbe78b70ee6bc1fed4134bd00dc43cc3e4abe22",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 160.24742226230387,
+      "total_tokens": 10,
+      "tree": null,
+      "ttft_seconds": 0.011860799975693226,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.036546099989209324,
+      "prompt_tokens": 12,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "score branch",
+      "rollout_throughput_per_hour": 98505.722937959,
+      "sample_index": 0,
+      "sample_key": "ee8dcc9d35c156dd2c844b99f3ffb808374c7e2a7cd1d4cc2b46b0ec2a8f12ae",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 54.72540163219944,
+      "total_tokens": 14,
+      "tree": null,
+      "ttft_seconds": 0.03581789997406304,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-2",
+      "completion_tokens": 2,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.03400990000227466,
+      "prompt_tokens": 8,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "reason branch",
+      "rollout_throughput_per_hour": 105851.53145875828,
+      "sample_index": 0,
+      "sample_key": "ff1dd9e9eaacfb4d5e15db858b3f8816325ad3188f7afd0d3cdb845287d88b86",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 58.80640636597683,
+      "total_tokens": 10,
+      "tree": null,
+      "ttft_seconds": 0.033124699955806136,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.01229149999562651,
+      "prompt_tokens": 12,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "score score prune clear",
+      "rollout_throughput_per_hour": 292885.32736288744,
+      "sample_index": 0,
+      "sample_key": "cd42635a2d172fb0a3c87445beafcb87f5dde603a6033723ac780ffa0c1858a1",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 325.4281415143194,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.011552700016181916,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.030953200010117143,
+      "prompt_tokens": 8,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "tree score clear branch",
+      "rollout_throughput_per_hour": 116304.61467064243,
+      "sample_index": 0,
+      "sample_key": "7ab7629ac1553af0c2f693ae6162b4f2b984cbc6cf981f1718e93950615e632e",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 129.22734963404716,
+      "total_tokens": 12,
+      "tree": null,
+      "ttft_seconds": 0.030168799974489957,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.032830099982675165,
+      "prompt_tokens": 12,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "path prune reuse score",
+      "rollout_throughput_per_hour": 109655.46866746561,
+      "sample_index": 0,
+      "sample_key": "968185de464ffb9795434cb6f2c19d7412370a21904a15d98f024dcd1d7a8988",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 121.83940963051735,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.03244069998618215,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.02982500003417954,
+      "prompt_tokens": 8,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "tree verify reuse score",
+      "rollout_throughput_per_hour": 120704.10715421256,
+      "sample_index": 0,
+      "sample_key": "25412894f0a438f91c2b8ad24e72749860b492bed00739556a1418b8e0ef347e",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 134.11567461579173,
+      "total_tokens": 12,
+      "tree": null,
+      "ttft_seconds": 0.029078899999149144,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.02937750000273809,
+      "prompt_tokens": 12,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "score branch branch fork",
+      "rollout_throughput_per_hour": 122542.76230667916,
+      "sample_index": 0,
+      "sample_key": "67c029c8fa2f3f882d62e80ef7442e9778662f589093e997999b4d673d5fa05e",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 136.15862478519907,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.02893249999033287,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-4",
+      "completion_tokens": 4,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.030019099998753518,
+      "prompt_tokens": 8,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "reason branch reason branch",
+      "rollout_throughput_per_hour": 119923.6486153643,
+      "sample_index": 0,
+      "sample_key": "aceea12dc2b81c944c0e00f9c64446f651b5598edebebb89d85a8bf98540ac32",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 133.2484984615159,
+      "total_tokens": 12,
+      "tree": null,
+      "ttft_seconds": 0.02956689998973161,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.03295520000392571,
+      "prompt_tokens": 12,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "score score prune clear merge fork path score",
+      "rollout_throughput_per_hour": 109239.20958061727,
+      "sample_index": 0,
+      "sample_key": "e6b3ad1c75cbd10764ab7d21dcbfface64f0452b1006378e599d0d96af908f7a",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 242.7537990680384,
+      "total_tokens": 20,
+      "tree": null,
+      "ttft_seconds": 0.03176829998847097,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.01356099999975413,
+      "prompt_tokens": 8,
+      "protocol_seed": 11,
+      "request_seed": 2965032250,
+      "response_text": "tree score clear branch checks clear reuse checks",
+      "rollout_throughput_per_hour": 265467.1484451936,
+      "sample_index": 0,
+      "sample_key": "54ac29e9c509697ad88a561aae17fc190b00a6f0921f6428e1d33cf60c0e7a25",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 589.9269965448747,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.012088499963283539,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.01347240002360195,
+      "prompt_tokens": 12,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "path prune reuse score score checks path checks",
+      "rollout_throughput_per_hour": 267212.9682679592,
+      "sample_index": 0,
+      "sample_key": "428ac0e8437970120e0e6ff094ca99632d461090ada373a040e3331a19b727d0",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 593.8065961510204,
+      "total_tokens": 20,
+      "tree": null,
+      "ttft_seconds": 0.011382500000763685,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.012730400019790977,
+      "prompt_tokens": 8,
+      "protocol_seed": 22,
+      "request_seed": 1517967453,
+      "response_text": "tree verify reuse score prune reason tree evidence",
+      "rollout_throughput_per_hour": 282787.6574501474,
+      "sample_index": 0,
+      "sample_key": "1c800b36445fd2cab096bd19384623a5f17eaec51c250be7a0b069c794911389",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 628.417016555883,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.011423600022681057,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "4",
+      "grader": "numeric",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.0402907999814488,
+      "prompt_tokens": 12,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "score branch branch fork evidence tree checks reason",
+      "rollout_throughput_per_hour": 89350.42247008145,
+      "sample_index": 0,
+      "sample_key": "74780858abb8b60707cf7c90a96b65346c717ab924e6f75d6365174d85ceb4bc",
+      "tags": [
+        "fixture",
+        "arithmetic"
+      ],
+      "task_id": "fixture-arithmetic-1",
+      "tokens_per_second": 198.55649437795878,
+      "total_tokens": 20,
+      "tree": null,
+      "ttft_seconds": 0.03806440002517775,
+      "useful_token_ratio": null
+    },
+    {
+      "budget_name": "tokens-8",
+      "completion_tokens": 8,
+      "correct": false,
+      "expected_answer": "fixture-ok",
+      "grader": "exact-match",
+      "kv_reuse_ratio": null,
+      "latency_seconds": 0.038337299949489534,
+      "prompt_tokens": 8,
+      "protocol_seed": 33,
+      "request_seed": 1575213548,
+      "response_text": "reason branch reason branch evidence path clear clear",
+      "rollout_throughput_per_hour": 93903.32664906242,
+      "sample_index": 0,
+      "sample_key": "c62bd3ad4e43c1f8a6f9eadc740148814d47057af08d5b0a876559f6a300838f",
+      "tags": [
+        "fixture",
+        "exact"
+      ],
+      "task_id": "fixture-exact-1",
+      "tokens_per_second": 208.67405922013873,
+      "total_tokens": 16,
+      "tree": null,
+      "ttft_seconds": 0.03614639997249469,
+      "useful_token_ratio": null
+    }
+  ],
+  "schema_version": "thoughtbench.results.v1",
+  "task_set": {
+    "name": "thoughtbench-contract-fixtures",
+    "provenance": {
+      "kind": "fixture",
+      "license": "Repository license",
+      "notice": "FIXTURE TASKS ONLY - NOT A REAL BENCHMARK RESULT.",
+      "source": "Bundled synthetic ThoughtBench contract fixtures"
+    },
+    "sha256": "4cba1ad356aa46161dc25fc89d746470f1711d3840e4473ff79687161a5d99fc",
+    "task_count": 2
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "label": "release-accuracy-autotree-single",
+  "engine_label": "AutoTree single",
+  "model": "replace-with-served-model",
+  "base_url": "http://autotree.example.invalid:8000",
+  "arm": "single",
+  "task_file": "../tasks/gsm8k_test.jsonl",
+  "output_dir": "../results",
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "seeds": [101, 102, 103],
+  "concurrency": 8,
+  "timeout": 120
+}
