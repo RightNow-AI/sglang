@@ -143,17 +143,13 @@ def _build_http_server() -> type:
             )
             tree_request.tree.validate()
             result = await self.tokenizer_manager.generate_request(tree_request, None).__anext__()
-            if not isinstance(result, tree_result):
-                raise RuntimeError("AutoTree engine returned an invalid TreeResult envelope")
-
-            log_probs = getattr(result, "winner_log_probs", None)
-            if log_probs is not None:
-                log_probs = [float(value) for value in log_probs]
-            summary = result.summary.to_dict() if hasattr(result.summary, "to_dict") else result.summary
+            token_ids, log_probs, finish_reason, summary = _coerce_plain_result(
+                result, tree_result
+            )
             return token_output(
-                token_ids=list(result.winner_token_ids),
+                token_ids=token_ids,
                 log_probs=log_probs,
-                stop_reason="length" if result.finish_reason == "length" else "completed",
+                stop_reason="length" if finish_reason == "length" else "completed",
                 extra_fields={"tree_summary": summary},
             )
 
@@ -161,6 +157,50 @@ def _build_http_server() -> type:
     AutoTreeHttpServer.__qualname__ = "AutoTreeHttpServer"
     return AutoTreeHttpServer
 
+
+
+def _coerce_plain_result(result, tree_result_cls=None):
+    """Normalize whatever the engine yielded into (token_ids, logprobs, reason, summary).
+
+    The tokenizer manager yields PLAIN DICTS for tree requests, the same shape
+    the serving layer consumes at serving_tree.py:309 via result.get("meta_info").
+    The previous code asserted isinstance(result, TreeResult) and raised on the
+    first real call, so this path had never run against a live engine.
+
+    It also read result.winner_log_probs, which does not exist on TreeResult
+    (its fields are winner_text, winner_token_ids, prompt_tokens,
+    completion_tokens, summary, finish_reason, counters, branch_events). getattr
+    with a default meant log_probs was silently always None, so a trainer got no
+    logprobs at all and could not compute a policy gradient. Real per-token
+    logprobs live in meta_info["output_token_logprobs"], as sglang triples of
+    (logprob, token_id, text).
+
+    A TreeResult object is still accepted so a future engine that yields one
+    keeps working.
+    """
+    if isinstance(result, dict):
+        meta = result.get("meta_info") or {}
+        raw = meta.get("output_token_logprobs")
+        log_probs = None
+        token_ids = None
+        if raw:
+            log_probs = [float(entry[0]) for entry in raw]
+            token_ids = [int(entry[1]) for entry in raw]
+        if token_ids is None:
+            token_ids = list(result.get("output_ids") or meta.get("output_ids") or [])
+        finish = meta.get("finish_reason")
+        if isinstance(finish, dict):
+            finish = finish.get("type")
+        summary = result.get("tree") or {}
+        return token_ids, log_probs, finish, summary
+
+    if tree_result_cls is not None and not isinstance(result, tree_result_cls):
+        raise RuntimeError(
+            "AutoTree engine returned an unsupported envelope: "
+            f"{type(result).__name__}"
+        )
+    summary = result.summary.to_dict() if hasattr(result.summary, "to_dict") else result.summary
+    return list(result.winner_token_ids), None, result.finish_reason, summary
 
 def _build_replica() -> type:
     server_module = import_module(
