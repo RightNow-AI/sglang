@@ -35,6 +35,11 @@ from sglang.srt.tree import (
     TreeSummary,
 )
 from sglang.srt.tree.memo import MemoStore, canonical_key
+from sglang.srt.tree.params import (
+    DEFAULT_CONSENSUS_INTERVAL,
+    DEFAULT_CONSENSUS_WARMUP,
+    DEFAULT_MIN_SURVIVORS,
+)
 from sglang.srt.tree.selection import env_int
 
 if TYPE_CHECKING:
@@ -186,6 +191,18 @@ class OpenAIServingTree(OpenAIServingBase):
                 fork_at_text=request.tree.fork_at_text,
                 fork_at_entropy=request.tree.fork_at_entropy,
                 adaptive_width=request.tree.adaptive_width,
+                # Read defensively: a payload parsed by an older schema will
+                # not carry the consensus knobs, and a missing knob must fall
+                # back to its documented default rather than raise.
+                consensus_warmup=getattr(
+                    request.tree, "consensus_warmup", DEFAULT_CONSENSUS_WARMUP
+                ),
+                consensus_interval=getattr(
+                    request.tree, "consensus_interval", DEFAULT_CONSENSUS_INTERVAL
+                ),
+                min_survivors=getattr(
+                    request.tree, "min_survivors", DEFAULT_MIN_SURVIVORS
+                ),
             ),
         )
         tree_request.tree.validate()

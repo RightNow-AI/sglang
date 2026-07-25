@@ -31,7 +31,14 @@ from collections import deque
 from typing import Any, Dict, Optional
 
 from sglang.srt.tree import selection
-from sglang.srt.tree.params import normalize_tree_params, validate_tree_params
+from sglang.srt.tree.consensus import ConsensusConfig, consensus_scores
+from sglang.srt.tree.params import (
+    DEFAULT_CONSENSUS_INTERVAL,
+    DEFAULT_CONSENSUS_WARMUP,
+    DEFAULT_MIN_SURVIVORS,
+    normalize_tree_params,
+    validate_tree_params,
+)
 from sglang.srt.tree.profile import ENABLED as _AUTOTREE_PROFILE_ENABLED
 from sglang.srt.tree.profile import incr as _autotree_profile_incr
 from sglang.srt.tree.profile import span as _autotree_profile_span
@@ -59,11 +66,42 @@ def _validate_branch_count(params: Dict[str, Any]) -> int:
             f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
         )
     adaptive_width = params.get("adaptive_width")
-    if adaptive_width is not None and adaptive_width > MAX_BRANCHES:
-        raise ValueError(
-            f"adaptive_width={adaptive_width} exceeds configured maximum="
-            f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
+    if adaptive_width is not None:
+        if not isinstance(adaptive_width, int) or isinstance(adaptive_width, bool):
+            raise ValueError("adaptive_width must be an integer")
+        if adaptive_width <= branches:
+            raise ValueError("adaptive_width must be greater than branches")
+        if adaptive_width > MAX_BRANCHES:
+            raise ValueError(
+                f"adaptive_width={adaptive_width} exceeds configured maximum="
+                f"{MAX_BRANCHES} (AUTOTREE_MAX_BRANCHES)"
+            )
+    if params.get("scorer") == "self_consistency":
+        consensus_warmup = params.get(
+            "consensus_warmup", DEFAULT_CONSENSUS_WARMUP
         )
+        consensus_interval = params.get(
+            "consensus_interval", DEFAULT_CONSENSUS_INTERVAL
+        )
+        min_survivors = params.get("min_survivors", DEFAULT_MIN_SURVIVORS)
+        if (
+            not isinstance(consensus_warmup, int)
+            or isinstance(consensus_warmup, bool)
+            or consensus_warmup < 0
+        ):
+            raise ValueError("consensus_warmup must be a non-negative integer")
+        if (
+            not isinstance(consensus_interval, int)
+            or isinstance(consensus_interval, bool)
+            or consensus_interval <= 0
+        ):
+            raise ValueError("consensus_interval must be a positive integer")
+        if (
+            not isinstance(min_survivors, int)
+            or isinstance(min_survivors, bool)
+            or min_survivors <= 0
+        ):
+            raise ValueError("min_survivors must be a positive integer")
     return branches
 
 
@@ -143,6 +181,7 @@ class _TreeRun:
         "entropy_lp_seen", "tail_snapshot_active", "finished_sibling_rids",
         "fork_input_ids", "adaptive_failed", "tail_tokens_saved",
         "parent_output_deferred",
+        "last_consensus_check",
     )
 
     def __init__(self, parent_rid: str, params: Dict[str, Any]) -> None:
@@ -170,6 +209,7 @@ class _TreeRun:
         self.adaptive_failed = False
         self.tail_tokens_saved = 0
         self.parent_output_deferred = False
+        self.last_consensus_check: Optional[int] = None
 
 
 class SchedulerTreeRuntime:
@@ -391,6 +431,10 @@ class SchedulerTreeRuntime:
             )
             and max(1, int(run.params.get("branches", 1) or 1)) > 1
         )
+
+    @staticmethod
+    def _consensus_enabled(run: _TreeRun) -> bool:
+        return run.params.get("scorer") == "self_consistency"
 
     @classmethod
     def _cache_supports_fork_namespaces(cls, tree_cache: Any) -> bool:
@@ -647,6 +691,7 @@ class SchedulerTreeRuntime:
             )
             run.spent = 0
             run.last_value_check = 0
+            run.last_consensus_check = None
             run.entropy_logprobs.clear()
             child_input_ids = (
                 parent_req.origin_input_ids
@@ -898,9 +943,14 @@ class SchedulerTreeRuntime:
         if state.branch_id == 0:
             self._park_parent_if_complete(run)
 
+        consensus_enabled = self._consensus_enabled(run)
+        if consensus_enabled:
+            self._maybe_consensus_prune(run)
+
         if run.spent - run.last_value_check >= VALUE_CHECK_INTERVAL:
             run.last_value_check = run.spent
-            self._maybe_value_prune(run)
+            if not consensus_enabled:
+                self._maybe_value_prune(run)
             if _os.environ.get("AUTOTREE_BENCH_FIXED_LEN") != "1":
                 self._maybe_majority_lock(run)
 
@@ -1127,6 +1177,127 @@ class SchedulerTreeRuntime:
         values[-1] = snapshot
         parent.req.customized_info = {"autotree": values}
 
+    def _consensus_branch_text(self, branch: _BranchState) -> str:
+        tokenizer = getattr(self.scheduler, "tokenizer", None)
+        if tokenizer is None or branch.req is None:
+            return ""
+        ids = list(branch.req.output_ids)
+        eos = getattr(tokenizer, "eos_token_id", None)
+        if eos is not None and eos in ids:
+            ids = ids[: ids.index(eos)]
+        if _AUTOTREE_PROFILE_ENABLED:
+            _autotree_profile_incr(
+                "tree.consensus.tokens_detokenized",
+                len(ids),
+            )
+        return tokenizer.decode(ids, skip_special_tokens=True)
+
+    @staticmethod
+    def _branch_is_live_for_consensus(branch: _BranchState) -> bool:
+        if branch.state != "active" or branch.req is None:
+            return False
+        finished = getattr(branch.req, "finished", None)
+        return not callable(finished) or not finished()
+
+    def _maybe_consensus_prune(self, run: _TreeRun) -> None:
+        """Prune live branches that trail the best deterministic agreement score."""
+        if run.finalized or not self._consensus_enabled(run):
+            return
+        alive = sorted(
+            (
+                branch
+                for branch in run.branches.values()
+                if self._branch_is_live_for_consensus(branch)
+            ),
+            key=lambda branch: branch.branch_id,
+        )
+        min_survivors = int(
+            run.params.get("min_survivors", DEFAULT_MIN_SURVIVORS)
+        )
+        if len(alive) <= min_survivors:
+            return
+
+        minimum_tokens = min(branch.tokens for branch in alive)
+        if minimum_tokens <= 0:
+            return
+        warmup = int(
+            run.params.get("consensus_warmup", DEFAULT_CONSENSUS_WARMUP)
+        )
+        if minimum_tokens < warmup:
+            return
+        interval = int(
+            run.params.get("consensus_interval", DEFAULT_CONSENSUS_INTERVAL)
+        )
+        checkpoint = warmup + ((minimum_tokens - warmup) // interval) * interval
+        if (
+            run.last_consensus_check is not None
+            and checkpoint <= run.last_consensus_check
+        ):
+            return
+
+        texts = {
+            branch.branch_id: self._consensus_branch_text(branch)
+            for branch in alive
+        }
+        scores = consensus_scores(
+            texts,
+            ConsensusConfig(min_survivors=min_survivors),
+        )
+        run.last_consensus_check = checkpoint
+        best_score = max(scores.values())
+        logger.info(
+            "[tree] %s consensus check at branch token %d: %s",
+            run.parent_rid,
+            minimum_tokens,
+            ", ".join(
+                f"b{branch_id}={scores[branch_id]:.3f}"
+                for branch_id in sorted(scores)
+            ),
+        )
+
+        killed = 0
+        n_alive = len(alive)
+        victims = sorted(
+            (
+                branch
+                for branch in alive
+                if branch.branch_id != 0 and scores[branch.branch_id] < best_score
+            ),
+            key=lambda branch: (scores[branch.branch_id], branch.branch_id),
+        )
+        for branch in victims:
+            if n_alive <= min_survivors:
+                break
+            branch_score = scores[branch.branch_id]
+            if not self._prune_branch(run, branch):
+                continue
+            killed += 1
+            n_alive -= 1
+            logger.info(
+                "[tree] %s consensus pruned branch-%d at token %d: "
+                "agreement %.3f vs best %.3f; pages reclaim on finish",
+                run.parent_rid,
+                branch.branch_id,
+                branch.tokens,
+                branch_score,
+                best_score,
+            )
+        if killed:
+            _autotree_profile_incr("tree.consensus.branches_killed", killed)
+
+    @staticmethod
+    def _prune_branch(run: _TreeRun, branch: _BranchState) -> bool:
+        """Mark one active branch for the scheduler's normal finish path."""
+        if branch.state != "active":
+            return False
+        from sglang.srt.managers.schedule_batch import FINISH_LENGTH
+
+        branch.state = "pruned"
+        run.pruned += 1
+        if branch.req is not None:
+            branch.req.to_finish = FINISH_LENGTH(length=len(branch.req.output_ids))
+        return True
+
     def _maybe_value_prune(self, run: _TreeRun) -> None:
         """EMVPT: prune branches whose mean-logprob value proxy trails the best
         sibling by more than VALUE_MARGIN nats/token. Branch 0 is never pruned
@@ -1148,8 +1319,6 @@ class SchedulerTreeRuntime:
             return
         best = max(b.mean_logprob() for b in scored)
 
-        from sglang.srt.managers.schedule_batch import FINISH_LENGTH
-
         n_alive = len(alive)
         for branch in sorted(scored, key=lambda b: b.mean_logprob()):
             if n_alive <= VALUE_MIN_KEEP:
@@ -1159,8 +1328,7 @@ class SchedulerTreeRuntime:
             gap = best - branch.mean_logprob()
             if gap <= VALUE_MARGIN:
                 break
-            branch.state = "pruned"
-            run.pruned += 1
+            self._prune_branch(run, branch)
             n_alive -= 1
             logger.info(
                 "[tree] %s pruned branch-%d at token %d: value gap %.3f "
@@ -1168,10 +1336,6 @@ class SchedulerTreeRuntime:
                 run.parent_rid, branch.branch_id, branch.tokens,
                 gap, branch.mean_logprob(), best,
             )
-            if branch.req is not None:
-                branch.req.to_finish = FINISH_LENGTH(
-                    length=len(branch.req.output_ids)
-                )
 
     def _finalize(self, run: _TreeRun, reason: str) -> None:
         run.finalized = True
@@ -1272,6 +1436,7 @@ if _AUTOTREE_PROFILE_ENABLED:
         "_account_tokens",
         "_attach_snapshot",
         "_extract_branch_answer",
+        "_maybe_consensus_prune",
         "_maybe_value_prune",
         "_maybe_majority_lock",
         "_fork_branches",

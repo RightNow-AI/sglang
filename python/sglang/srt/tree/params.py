@@ -18,6 +18,9 @@ from sglang.srt.tree.selection import env_int
 TREE_POLICIES = ("beam", "best_first", "mcts")
 MAX_BRANCHES = env_int("AUTOTREE_MAX_BRANCHES", 64)
 MAX_BUDGET_TOKENS = 1_000_000
+DEFAULT_CONSENSUS_WARMUP = 64
+DEFAULT_CONSENSUS_INTERVAL = 32
+DEFAULT_MIN_SURVIVORS = 2
 TREE_PARAM_NAMES = frozenset(
     {
         "policy",
@@ -27,6 +30,9 @@ TREE_PARAM_NAMES = frozenset(
         "fork_at_text",
         "fork_at_entropy",
         "adaptive_width",
+        "consensus_warmup",
+        "consensus_interval",
+        "min_survivors",
     }
 )
 
@@ -92,6 +98,30 @@ def validate_tree_params(params: Mapping[str, Any]) -> None:
         if adaptive_width > MAX_BRANCHES:
             raise ValueError(f"adaptive_width must be at most {MAX_BRANCHES}")
 
+    consensus_warmup = params.get("consensus_warmup", DEFAULT_CONSENSUS_WARMUP)
+    if (
+        not isinstance(consensus_warmup, int)
+        or isinstance(consensus_warmup, bool)
+        or consensus_warmup < 0
+    ):
+        raise ValueError("consensus_warmup must be a non-negative integer")
+
+    consensus_interval = params.get("consensus_interval", DEFAULT_CONSENSUS_INTERVAL)
+    if (
+        not isinstance(consensus_interval, int)
+        or isinstance(consensus_interval, bool)
+        or consensus_interval <= 0
+    ):
+        raise ValueError("consensus_interval must be a positive integer")
+
+    min_survivors = params.get("min_survivors", DEFAULT_MIN_SURVIVORS)
+    if (
+        not isinstance(min_survivors, int)
+        or isinstance(min_survivors, bool)
+        or min_survivors <= 0
+    ):
+        raise ValueError("min_survivors must be a positive integer")
+
 
 def normalize_tree_params(params: Mapping[str, Any]) -> Dict[str, Any]:
     """Apply wire defaults and return a validated scheduler parameter dict."""
@@ -105,6 +135,9 @@ def normalize_tree_params(params: Mapping[str, Any]) -> Dict[str, Any]:
         "fork_at_text": None,
         "fork_at_entropy": None,
         "adaptive_width": None,
+        "consensus_warmup": DEFAULT_CONSENSUS_WARMUP,
+        "consensus_interval": DEFAULT_CONSENSUS_INTERVAL,
+        "min_survivors": DEFAULT_MIN_SURVIVORS,
     }
     normalized.update(dict(params))
     validate_tree_params(normalized)
@@ -122,6 +155,9 @@ class TreeParams:
     fork_at_text: Optional[str] = None
     fork_at_entropy: Optional[float] = None
     adaptive_width: Optional[int] = None
+    consensus_warmup: int = DEFAULT_CONSENSUS_WARMUP
+    consensus_interval: int = DEFAULT_CONSENSUS_INTERVAL
+    min_survivors: int = DEFAULT_MIN_SURVIVORS
 
     def validate(self) -> None:
         validate_tree_params(dataclasses.asdict(self))

@@ -636,6 +636,11 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                     "budget_tokens": getattr(tree, "budget_tokens", 0),
                     "scorer": getattr(tree, "scorer", None),
                     "fork_at_text": getattr(tree, "fork_at_text", None),
+                    "fork_at_entropy": getattr(tree, "fork_at_entropy", None),
+                    "adaptive_width": getattr(tree, "adaptive_width", None),
+                    "consensus_warmup": getattr(tree, "consensus_warmup", 64),
+                    "consensus_interval": getattr(tree, "consensus_interval", 32),
+                    "min_survivors": getattr(tree, "min_survivors", 2),
                 }
             setattr(base, "_autotree_params", params)
             return base
