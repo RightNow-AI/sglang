@@ -1,0 +1,57 @@
+{
+ "label": "fp4-triton",
+ "config": {
+  "base": "http://127.0.0.1:30000",
+  "model": "Qwen/Qwen2.5-72B-Instruct-AWQ",
+  "server_log": "/home/ubuntu/s_fp4b.log",
+  "prompt_tokens": 7500,
+  "out_tokens": 512,
+  "sweep": "1,4,8,16,24,32",
+  "out": "/home/ubuntu/sweep_fp4.json",
+  "label": "fp4-triton"
+ },
+ "points": [
+  {
+   "n": 1,
+   "elapsed_s": 171.84,
+   "gen_tokens": 512,
+   "prompt_tokens": 7293,
+   "kv_tokens_resident": 7805,
+   "agg_decode_tps": 3.0,
+   "per_req_tps": 2.98,
+   "engine_max_usage": 0.03,
+   "engine_max_running": 1,
+   "engine_max_queued": 0,
+   "engine_median_tps": 3.0,
+   "telemetry_samples": 10
+  },
+  {
+   "n": 4,
+   "elapsed_s": 184.017,
+   "gen_tokens": 2048,
+   "prompt_tokens": 29178,
+   "kv_tokens_resident": 31226,
+   "agg_decode_tps": 11.1,
+   "per_req_tps": 2.78,
+   "engine_max_usage": 0.11,
+   "engine_max_running": 4,
+   "engine_max_queued": 0,
+   "engine_median_tps": 12.2,
+   "telemetry_samples": 11
+  },
+  {
+   "n": 8,
+   "elapsed_s": 200.819,
+   "gen_tokens": 4096,
+   "prompt_tokens": 58357,
+   "kv_tokens_resident": 62453,
+   "agg_decode_tps": 20.4,
+   "per_req_tps": 2.55,
+   "engine_max_usage": 0.21,
+   "engine_max_running": 8,
+   "engine_max_queued": 0,
+   "engine_median_tps": 24.2,
+   "telemetry_samples": 11
+  }
+ ]
+}
