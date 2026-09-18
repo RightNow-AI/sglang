@@ -755,6 +755,13 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
         # verification against stock attention.
         import os as _autotree_os
 
+        _autotree_trace = _autotree_os.environ.get("AUTOTREE_SHARED_READ_TRACE") == "1"
+
+        def _sr_diag(msg):
+            if _autotree_trace:
+                import sys as _sys
+                print("[sr-diag] " + msg, file=_sys.stderr, flush=True)
+
         if (
             ret.forward_mode.is_decode()
             and ret.rids
@@ -764,18 +771,38 @@ class ForwardBatch(ForwardBatchDeepSeekMHAMixin):
                 from sglang.srt.tree.tree_runtime import get_active as _autotree_get_active
 
                 _autotree_runtime = _autotree_get_active()
+                _sr_diag(
+                    "decode batch rids=%d sample=%r active=%s"
+                    % (len(ret.rids), list(ret.rids)[:3], _autotree_runtime is not None)
+                )
                 if _autotree_runtime is not None:
                     _autotree_groups = {}
+                    _sr_hits = 0
                     for _autotree_rid in ret.rids:
                         _autotree_group = _autotree_runtime.get_shared_prefix_group(
                             _autotree_rid
                         )
                         if _autotree_group is not None:
+                            _sr_hits += 1
                             _autotree_groups[id(_autotree_group)] = _autotree_group
+                    _sr_diag(
+                        "group lookup: %d/%d rids matched, %d distinct groups"
+                        % (_sr_hits, len(ret.rids), len(_autotree_groups))
+                    )
                     if _autotree_groups:
                         ret.shared_prefix_groups = list(_autotree_groups.values())
-            except Exception:
+            except Exception as _sr_exc:
+                _sr_diag("EXCEPTION in population: %r" % (_sr_exc,))
                 ret.shared_prefix_groups = None
+        elif _autotree_trace:
+            _sr_diag(
+                "population SKIPPED: is_decode=%s rids=%s sr_env=%r"
+                % (
+                    ret.forward_mode.is_decode(),
+                    bool(ret.rids),
+                    _autotree_os.environ.get("AUTOTREE_SHARED_READ", "1"),
+                )
+            )
 
         if envs.SGLANG_KV_CANARY_ENABLE_TOKEN_ORACLE.get():
             hashed = _hash_rids_to_tensor(
